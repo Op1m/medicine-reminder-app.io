@@ -160,6 +160,23 @@ public void deleteCourse(Long courseId) {
 
 @Override
 @Transactional
+public Course updateCourse(Long courseId, String name, LocalDate startDate, LocalDate endDate) {
+    Course course = findById(courseId);
+    if (name != null && !name.isBlank()) {
+        course.setName(name);
+    }
+    if (startDate != null) {
+        course.setStartDate(startDate);
+    }
+    if (endDate != null) {
+        course.setEndDate(endDate);
+    }
+    // После обновления дат нужно перегенерировать напоминания (фронт это делает отдельно)
+    return courseRepository.save(course);
+}
+
+@Override
+@Transactional
 public Course deactivateCourse(Long courseId) {
     Course course = findById(courseId);
     course.setActive(false);

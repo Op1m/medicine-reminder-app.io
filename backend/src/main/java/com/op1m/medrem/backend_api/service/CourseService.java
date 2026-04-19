@@ -12,6 +12,7 @@ public interface CourseService {
     Course findById(Long courseId);
     CourseMedication addMedicationToCourse(Long courseId, CourseMedication medication);
 void deleteCourse(Long courseId);
+Course updateCourse(Long courseId, String name, LocalDate startDate, LocalDate endDate);
     int generateRemindersForCourse(Long courseId);
     int regenerateFutureReminders(Long courseId);
     Course deactivateCourse(Long courseId);

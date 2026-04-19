@@ -41,6 +41,15 @@ public ResponseEntity<Map<String, Object>> deleteCourse(@PathVariable Long cours
     return ResponseEntity.ok(response);
 }
 
+@PutMapping("/{courseId}")
+public ResponseEntity<Course> updateCourse(@PathVariable Long courseId,
+                                           @RequestBody UpdateCourseRequest request) {
+    Course course = courseService.updateCourse(courseId, request.getName(),
+            request.getStartDate(), request.getEndDate());
+    return ResponseEntity.ok(course);
+}
+
+
     @PostMapping
     public ResponseEntity<Course> createCourse(@RequestBody CreateCourseRequest request) {
         Course course = courseService.createCourse(
@@ -151,4 +160,19 @@ public ResponseEntity<Map<String, Object>> deleteCourse(@PathVariable Long cours
         public Integer getIntervalDays() { return intervalDays; }
         public void setIntervalDays(Integer intervalDays) { this.intervalDays = intervalDays; }
     }
+
+    public static class UpdateCourseRequest {
+    private String name;
+    private LocalDate startDate;
+    private LocalDate endDate;
+
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+
+    public LocalDate getStartDate() { return startDate; }
+    public void setStartDate(LocalDate startDate) { this.startDate = startDate; }
+
+    public LocalDate getEndDate() { return endDate; }
+    public void setEndDate(LocalDate endDate) { this.endDate = endDate; }
+}
 }
