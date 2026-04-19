@@ -1,6 +1,7 @@
 package com.op1m.medrem.backend_api.repository;
 
 import com.op1m.medrem.backend_api.entity.Course;
+import com.op1m.medrem.backend_api.entity.Reminder;
 import com.op1m.medrem.backend_api.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 

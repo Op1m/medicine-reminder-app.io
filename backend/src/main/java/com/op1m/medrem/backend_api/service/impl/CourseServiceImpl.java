@@ -223,8 +223,9 @@ private int generateRemindersInternal(Course course, boolean futureOnly) {
         return 0;
     }
 
-    // Загружаем существующие напоминания курса
-    List<Reminder> existingReminders = reminderRepository.findByUserIdWithMedicine(course.getUser().getId());
+    // Загружаем только напоминания этого курса
+    List<Reminder> existingReminders = reminderRepository.findByCourseMedication_Course_Id(course.getId());
+
     OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
     LocalDate today = now.toLocalDate();
     int created = 0;
@@ -246,29 +247,31 @@ private int generateRemindersInternal(Course course, boolean futureOnly) {
 
             if (!futureOnly || isFuture) {
                 if (matchesSchedule(course.getStartDate(), current, medication)) {
-
                     final LocalDate currentDate = current;
 
-                    // Проверяем, существует ли уже такое напоминание
-                    boolean alreadyExists = existingReminders.stream().anyMatch(r ->
-                            r.getMedicine() != null &&
+                    // Безопасная проверка существования
+                    boolean alreadyExists = false;
+                    for (Reminder r : existingReminders) {
+                        if (r.getMedicine() != null &&
                             r.getMedicine().getId().equals(medicine.getId()) &&
                             r.getReminderTime() != null &&
                             r.getReminderTime().equals(medication.getTimeOfDay()) &&
-                            currentDate.equals(r.getSpecificDate()) &&  // ← проверяем по specificDate
+                            currentDate.equals(r.getSpecificDate()) &&
                             r.getCourseMedication() != null &&
                             r.getCourseMedication().getId().equals(medication.getId()) &&
-                            Boolean.TRUE.equals(r.getIsActive())
-                    );
+                            Boolean.TRUE.equals(r.getIsActive())) {
+                            alreadyExists = true;
+                            break;
+                        }
+                    }
 
                     if (!alreadyExists) {
-                        // Используем специальный метод для курсовых напоминаний
                         Reminder reminder = reminderService.createCourseReminder(
                                 course.getUser().getId(),
                                 medicine.getId(),
                                 medication.getTimeOfDay(),
-                                current,                     // ← specificDate
-                                medication                   // ← связь с CourseMedication
+                                current,
+                                medication
                         );
 
                         if (reminder != null) {
@@ -278,11 +281,9 @@ private int generateRemindersInternal(Course course, boolean futureOnly) {
                     }
                 }
             }
-
             current = current.plusDays(1);
         }
     }
-
     return created;
 }
 

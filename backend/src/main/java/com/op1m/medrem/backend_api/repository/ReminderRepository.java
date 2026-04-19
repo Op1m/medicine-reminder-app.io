@@ -45,4 +45,6 @@ public interface ReminderRepository extends JpaRepository<Reminder, Long> {
 
     @Query("SELECT r FROM Reminder r WHERE r.courseMedication.id = :courseMedicationId")
     List<Reminder> findByCourseMedicationId(@Param("courseMedicationId") Long courseMedicationId);
+
+        List<Reminder> findByCourseMedication_Course_Id(Long courseId);
 }
