@@ -176,12 +176,20 @@ public class ReminderServiceImpl implements ReminderService {
         return timeMatches && dayMatches;
     }
 
-    private boolean checkDayOfWeek(Reminder reminder, OffsetDateTime now) {
-        String daysOfWeek = reminder.getDaysOfWeek();
-        if (daysOfWeek == null || daysOfWeek.equals("everyday")) return true;
-        int currentDay = now.getDayOfWeek().getValue();
-        return daysOfWeek.contains(String.valueOf(currentDay));
+private boolean checkDayOfWeek(Reminder reminder, OffsetDateTime now) {
+    String daysOfWeek = reminder.getDaysOfWeek();
+
+    if (daysOfWeek == null || daysOfWeek.equals("everyday")) {
+        return true;
     }
+    
+    if (daysOfWeek.matches("^\\d{4}-\\d{2}-\\d{2}$")) {
+        return now.toLocalDate().toString().equals(daysOfWeek);
+    }
+
+    int currentDay = now.getDayOfWeek().getValue();
+    return daysOfWeek.contains(String.valueOf(currentDay));
+}
 
     @Override
     @CacheEvict(cacheNames = {"remindersByUser", "remindersAll"}, allEntries = true)

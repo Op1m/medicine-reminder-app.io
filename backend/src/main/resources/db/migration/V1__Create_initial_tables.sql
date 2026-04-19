@@ -40,3 +40,31 @@ CREATE TABLE medicine_history (
                                   notes TEXT,
                                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE courses (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+-- course_medications
+CREATE TABLE course_medications (
+    id BIGSERIAL PRIMARY KEY,
+    course_id BIGINT NOT NULL,
+    medicine_name VARCHAR(255) NOT NULL,
+    dosage VARCHAR(255),
+    description TEXT,
+    instructions TEXT,
+    meal_mode VARCHAR(50),
+    time_of_day TIME NOT NULL,
+    schedule_type VARCHAR(50),
+    interval_days INT,
+    generated_medicine_id BIGINT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
