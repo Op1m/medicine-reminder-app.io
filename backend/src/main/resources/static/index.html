@@ -2385,7 +2385,21 @@ async function updateCourse(courseId, name, startDate, endDate) {
     }
 
     async function generateRemindersForCourse(courseId) {
-        return await apiFetch(`/courses/${courseId}/generate-reminders`, { method: 'POST' });
+    const result = await apiFetch(`/courses/${courseId}/generate-reminders`, { method: 'POST' });
+
+    // Принудительно обновляем список напоминаний
+    if (currentUser) {
+        console.log('🔄 Обновление напоминаний после генерации курса...');
+        await loadReminders(true); // true = принудительная загрузка с сервера
+
+        // Если мы на главном экране, перерисовываем
+        if (selectedDay) {
+            await loadHistoryForDate(selectedDay);
+            renderGroupsForDate(selectedDay);
+        }
+    }
+
+    return result;
     }
 
 
@@ -3057,15 +3071,25 @@ function getStatusForReminderOnDate(reminder, date) {
     return (relevant[0].status || 'pending').toLowerCase();
 }
 
-        function remindersForDate(date) {
-            const dayOfWeek = date.getDay() === 0 ? 7 : date.getDay();
-            return reminders.filter(r => {
-                const days = r.daysOfWeek;
-                if (!days) return false;
-                if (days === 'everyday') return true;
-                return String(days).split(',').map(x => parseInt(x)).includes(dayOfWeek);
-            });
+function remindersForDate(date) {
+    const dateKey = date.toISOString().split('T')[0];
+    const dayOfWeek = date.getDay() === 0 ? 7 : date.getDay();
+
+    return reminders.filter(r => {
+        // Для курсовых напоминаний (имеют specificDate)
+        if (r.specificDate) {
+            // Для отладки можно раскомментировать
+            // console.log('Checking course reminder:', r.id, 'specificDate:', r.specificDate, 'vs', dateKey);
+            return r.specificDate === dateKey;
         }
+
+        // Для обычных напоминаний (имеют daysOfWeek)
+        const days = r.daysOfWeek;
+        if (!days) return false;
+        if (days === 'everyday') return true;
+        return String(days).split(',').map(x => parseInt(x)).includes(dayOfWeek);
+    });
+}
 
         function getStatusForReminderOnDate(reminder, date) {
             const dateKey = date.toISOString().split('T')[0];
@@ -3807,28 +3831,36 @@ function setActiveTab(tabId) {
     }
 
     if (active === 'home') {
-        monthBar.style.display = '';
-        weekRow.style.display = '';
-        dividerLight.style.display = '';
+    monthBar.style.display = '';
+    weekRow.style.display = '';
+    dividerLight.style.display = '';
 
-        // Создаём новый content div для главной
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'content';
-        contentDiv.id = 'content';
-        dynamicContent.appendChild(contentDiv);
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'content';
+    contentDiv.id = 'content';
+    dynamicContent.appendChild(contentDiv);
 
-        // Принудительно перезагружаем историю и рендерим
-        if (selectedDay) {
-            const dateKey = selectedDay.toISOString().split('T')[0];
-            historyCache.delete(dateKey);
-            loadHistoryForDate(selectedDay).then(() => {
-                renderGroupsForDate(selectedDay);
-            });
-        }
+    // 🔄 ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ НАПОМИНАНИЯ
+    if (currentUser) {
+        loadReminders(true).then(() => {
+            if (selectedDay) {
+                const dateKey = selectedDay.toISOString().split('T')[0];
+                historyCache.delete(dateKey);
+                loadHistoryForDate(selectedDay).then(() => {
+                    renderGroupsForDate(selectedDay);
+                });
+            }
+        });
+    } else if (selectedDay) {
+        const dateKey = selectedDay.toISOString().split('T')[0];
+        historyCache.delete(dateKey);
+        loadHistoryForDate(selectedDay).then(() => {
+            renderGroupsForDate(selectedDay);
+        });
+    }
 
-        updatePlusButton('home');
-
-    } else if (active === 'stats') {
+    updatePlusButton('home');
+} else if (active === 'stats') {
         monthBar.style.display = 'none';
         weekRow.style.display = 'none';
         dividerLight.style.display = 'none';
@@ -3923,7 +3955,21 @@ async function deleteCourseMedication(courseId, medicationId) {
 }
 
 async function regenerateRemindersForCourse(courseId) {
-    return await apiFetch(`/courses/${courseId}/generate-reminders`, { method: 'POST' });
+    const result = await apiFetch(`/courses/${courseId}/generate-reminders`, { method: 'POST' });
+
+    // Принудительно обновляем список напоминаний
+    if (currentUser) {
+        console.log('🔄 Обновление напоминаний после генерации курса...');
+        await loadReminders(true); // true = принудительная загрузка с сервера
+
+        // Если мы на главном экране, перерисовываем
+        if (selectedDay) {
+            await loadHistoryForDate(selectedDay);
+            renderGroupsForDate(selectedDay);
+        }
+    }
+
+    return result;
 }
 
 function calculateCourseProgress(course) {
@@ -4550,6 +4596,157 @@ document.getElementById('navHome')?.addEventListener('click', () => {
         startAutoRefresh();
         setupSSE();
     }
+
+    // 👇 ДОБАВЬТЕ ЭТОТ КОД ЗДЕСЬ 👇
+    // Принудительно проверяем загрузку курсовых напоминаний
+    setTimeout(() => {
+        if (currentUser && reminders) {
+            const courseCount = reminders.filter(r => r.specificDate).length;
+            console.log('📊 Диагностика после загрузки:');
+            console.log('   - Всего напоминаний:', reminders.length);
+            console.log('   - Курсовых напоминаний:', courseCount);
+
+            if (courseCount === 0) {
+                console.warn('⚠️ Курсовые напоминания не загружены! Пробуем перезагрузить...');
+                loadReminders(true).then(() => {
+                    console.log('   - После перезагрузки курсовых:', reminders.filter(r => r.specificDate).length);
+                    if (selectedDay) {
+                        loadHistoryForDate(selectedDay).then(() => {
+                            renderGroupsForDate(selectedDay);
+                        });
+                    }
+                });
+            }
+        }
+    }, 1000);
+    // 👆 КОНЕЦ ДОБАВЛЯЕМОГО КОДА 👆
+    setTimeout(() => {
+    // Создаём плавающую кнопку диагностики
+    const diagBtn = document.createElement('div');
+    diagBtn.style.cssText = `
+        position: fixed;
+        bottom: 100px;
+        right: 20px;
+        width: 50px;
+        height: 50px;
+        background: #2E86FF;
+        border-radius: 25px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+        font-size: 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 10000;
+        cursor: pointer;
+    `;
+    diagBtn.innerHTML = '🔍';
+    diagBtn.onclick = async () => {
+        // Собираем диагностику
+        const total = reminders?.length || 0;
+        const courseReminders = reminders?.filter(r => r.specificDate) || [];
+        const courseCount = courseReminders.length;
+
+        // Проверяем API напрямую
+        let apiTotal = 0;
+        let apiCourseCount = 0;
+        try {
+            const res = await fetch(`${API_BASE}/reminders/user/${currentUser?.id}`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            const data = await res.json();
+            apiTotal = data.length;
+            apiCourseCount = data.filter(r => r.specificDate).length;
+        } catch(e) {
+            console.error('API error:', e);
+        }
+
+        // Показываем результат
+        alert(`
+📊 ДИАГНОСТИКА НАПОМИНАНИЙ
+━━━━━━━━━━━━━━━━━━━━━━
+📦 В памяти (reminders):
+   • Всего: ${total}
+   • Курсовых: ${courseCount}
+
+🌐 С сервера (API):
+   • Всего: ${apiTotal}
+   • Курсовых: ${apiCourseCount}
+
+📅 Выбранная дата: ${selectedDay?.toISOString().split('T')[0] || 'не выбрана'}
+👤 Пользователь: ${currentUser?.firstName || 'не авторизован'}
+
+${courseCount === 0 && apiCourseCount > 0 ? '⚠️ Напоминания есть на сервере, но не загружены!' : ''}
+${apiCourseCount === 0 ? '❌ На сервере нет курсовых напоминаний!' : ''}
+        `);
+
+        // Если на сервере есть, а в памяти нет - принудительно загружаем
+        if (apiCourseCount > 0 && courseCount === 0) {
+            if (confirm('Напоминания есть на сервере. Загрузить их сейчас?')) {
+                await loadReminders(true);
+                if (selectedDay) {
+                    await loadHistoryForDate(selectedDay);
+                    renderGroupsForDate(selectedDay);
+                }
+                alert('✅ Напоминания загружены! Проверьте главный экран.');
+            }
+        }
+
+        // Если на сервере нет - предлагаем создать тестовый курс
+        if (apiCourseCount === 0 && currentUser) {
+            if (confirm('Курсовых напоминаний нет. Создать тестовый курс?')) {
+                // Создаём тестовый курс
+                const today = new Date();
+                const endDate = new Date();
+                endDate.setDate(today.getDate() + 7);
+
+                try {
+                    const course = await createCourse('Тестовый курс',
+                        today.toISOString().split('T')[0],
+                        endDate.toISOString().split('T')[0]);
+
+                    await addMedicationToCourse(course.id, {
+                        medicineName: 'Тестовый препарат',
+                        dosage: '1 таблетка',
+                        instructions: 'После еды',
+                        mealMode: 'AFTER_MEAL',
+                        timeOfDay: '09:00',
+                        scheduleType: 'EVERY_DAY',
+                        intervalDays: 1
+                    });
+
+                    await regenerateRemindersForCourse(course.id);
+
+                    alert('✅ Тестовый курс создан! Перейдите на главный экран и выберите дату.');
+                } catch(e) {
+                    alert('❌ Ошибка создания курса: ' + e.message);
+                }
+            }
+        }
+    };
+
+    document.body.appendChild(diagBtn);
+
+    // Текст с инструкцией
+    const hint = document.createElement('div');
+    hint.style.cssText = `
+        position: fixed;
+        bottom: 160px;
+        right: 20px;
+        background: rgba(0,0,0,0.7);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        z-index: 10000;
+        pointer-events: none;
+    `;
+    hint.innerHTML = 'Нажмите 🔍 для диагностики';
+    document.body.appendChild(hint);
+
+    setTimeout(() => hint.remove(), 5000);
+}, 2000);
 })();
 
         let tapCount = 0;
@@ -5908,14 +6105,14 @@ document.getElementById('navHome')?.addEventListener('click', () => {
         }
 
 if (typeof originalGetStatus === 'function') {
-    window.getStatusForReminderOnDate = function(reminder, date) {
-        const serverKey = getServerDateKey(date);
-        const histories = historyMap.get(serverKey) || [];
-        const history = histories.find(h =>
-            h.reminder && String(h.reminder.id) === String(reminder.id)
-        );
-        return history ? (history.status || 'pending').toLowerCase() : 'pending';
-    };
+window.getStatusForReminderOnDate = function(reminder, date) {
+    const serverKey = getServerDateKey(date);
+    const histories = historyMap.get(serverKey) || [];
+    const history = histories.find(h =>
+        h.reminder && String(h.reminder.id) === String(reminder.id)
+    );
+    return history ? (history.status || 'pending').toLowerCase() : 'pending';
+};
 }
 
         function patchOptimisticFunction(name) {

@@ -67,15 +67,23 @@ public class ReminderServiceImpl implements ReminderService {
 
     @Override
     @Transactional
-public Reminder createCourseReminder(Long userId, Long medicineId, LocalTime time,
+public Reminder createCourseReminder(Long userId, Long medicineId, LocalTime reminderTime,
                                      LocalDate specificDate, CourseMedication courseMedication) {
     User user = userService.findById(userId);
+
     Medicine medicine = medicineService.findById(medicineId);
-    Reminder reminder = new Reminder(user, medicine, time);
-    reminder.setSpecificDate(specificDate);
-    reminder.setDaysOfWeek(null); // для конкретной даты дни недели не нужны
-    reminder.setCourseMedication(courseMedication);
+
+    Reminder reminder = new Reminder();
+    reminder.setUser(user);
+    reminder.setMedicine(medicine);
+    reminder.setReminderTime(reminderTime);
     reminder.setActive(true);
+
+    // 👇 ВАЖНО! Эти поля делают напоминание курсовым
+    reminder.setSpecificDate(specificDate);        // ← ДОЛЖНО БЫТЬ!
+    reminder.setCourseMedication(courseMedication); // ← ДОЛЖНО БЫТЬ!
+    reminder.setDaysOfWeek(null);                  // ← ДОЛЖНО БЫТЬ null!
+
     return reminderRepository.save(reminder);
 }
 
