@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.util.List;
 
 public interface ReminderRepository extends JpaRepository<Reminder, Long> {
@@ -35,4 +36,13 @@ public interface ReminderRepository extends JpaRepository<Reminder, Long> {
             "left join fetch r.user u " +
             "where r.user.id = :userId")
     List<Reminder> findByUserIdWithMedicine(@Param("userId") Long userId);
+
+    @Query("SELECT r FROM Reminder r " +
+           "JOIN FETCH r.user u " +
+           "JOIN FETCH r.medicine m " +
+           "WHERE r.isActive = true AND r.specificDate = :date")
+    List<Reminder> findActiveBySpecificDate(@Param("date") LocalDate date);
+
+    @Query("SELECT r FROM Reminder r WHERE r.courseMedication.id = :courseMedicationId")
+    List<Reminder> findByCourseMedicationId(@Param("courseMedicationId") Long courseMedicationId);
 }

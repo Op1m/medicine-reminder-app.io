@@ -1,10 +1,13 @@
 package com.op1m.medrem.backend_api.service.impl;
 
+import com.op1m.medrem.backend_api.entity.CourseMedication;
 import com.op1m.medrem.backend_api.entity.Reminder;
 import com.op1m.medrem.backend_api.entity.User;
 import com.op1m.medrem.backend_api.entity.Medicine;
 import com.op1m.medrem.backend_api.repository.MedicineHistoryRepository;
+import com.op1m.medrem.backend_api.repository.MedicineRepository;
 import com.op1m.medrem.backend_api.repository.ReminderRepository;
+import com.op1m.medrem.backend_api.repository.UserRepository;
 import com.op1m.medrem.backend_api.service.ReminderService;
 import com.op1m.medrem.backend_api.service.UserService;
 import com.op1m.medrem.backend_api.service.MedicineService;
@@ -18,6 +21,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
@@ -59,6 +63,25 @@ public class ReminderServiceImpl implements ReminderService {
         Reminder savedReminder = reminderRepository.save(reminder);
         logger.info("Напоминание создано: id={}", savedReminder.getId());
         return savedReminder;
+    }
+
+    @Override
+    @Transactional
+    public Reminder createCourseReminder(Long userId, Long medicineId, LocalTime reminderTime,
+                                         LocalDate specificDate, CourseMedication courseMedication) {
+        User user = userService.findById(userId);
+        Medicine medicine = medicineService.findById(medicineId);
+
+        Reminder reminder = new Reminder();
+        reminder.setUser(user);
+        reminder.setMedicine(medicine);
+        reminder.setReminderTime(reminderTime);
+        reminder.setSpecificDate(specificDate);        // ← дата курса
+        reminder.setDaysOfWeek(null);                  // ← не используется для курсовых
+        reminder.setActive(true);
+        reminder.setCourseMedication(courseMedication);
+
+        return reminderRepository.save(reminder);
     }
 
     @Override
@@ -182,7 +205,7 @@ private boolean checkDayOfWeek(Reminder reminder, OffsetDateTime now) {
     if (daysOfWeek == null || daysOfWeek.equals("everyday")) {
         return true;
     }
-    
+
     if (daysOfWeek.matches("^\\d{4}-\\d{2}-\\d{2}$")) {
         return now.toLocalDate().toString().equals(daysOfWeek);
     }
@@ -206,6 +229,8 @@ private boolean checkDayOfWeek(Reminder reminder, OffsetDateTime now) {
         logger.info("Reminder {} updated", updated.getId());
         return updated;
     }
+
+
 
     @Async
     public CompletableFuture<List<Reminder>> getUserRemindersAsync(Long userId) {

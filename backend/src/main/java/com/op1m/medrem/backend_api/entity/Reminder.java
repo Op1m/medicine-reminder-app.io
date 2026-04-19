@@ -1,6 +1,8 @@
 package com.op1m.medrem.backend_api.entity;
 
 import jakarta.persistence.*;
+
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -39,6 +41,9 @@ public class Reminder {
 @JoinColumn(name = "course_medication_id")
 private CourseMedication courseMedication;
 
+        @Column(name = "specific_date")
+    private LocalDate specificDate;
+
     public Reminder() {
         this.createdAt = OffsetDateTime.now(ZoneOffset.UTC);
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
@@ -74,10 +79,20 @@ private CourseMedication courseMedication;
     public String getDaysOfWeek() { return daysOfWeek; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
+        public LocalDate getSpecificDate() {
+        return specificDate;
+    }
+
+    public void setSpecificDate(LocalDate specificDate) {
+        this.specificDate = specificDate;
+        this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
+    }
+    public CourseMedication getCourseMedication( ) {return courseMedication;}
 
     public void setId(Long id) { this.id = id; }
     public void setUser(User user) { this.user = user; }
     public void setMedicine(Medicine medicine) { this.medicine = medicine; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
+    public void setCourseMedication(CourseMedication courseMedication) {this.courseMedication = courseMedication;}
 }

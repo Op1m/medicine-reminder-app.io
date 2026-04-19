@@ -11,7 +11,7 @@ public interface CourseService {
     List<Course> getUserCourses(Long userId);
     Course findById(Long courseId);
     CourseMedication addMedicationToCourse(Long courseId, CourseMedication medication);
-
+void deleteCourse(Long courseId);
     int generateRemindersForCourse(Long courseId);
     int regenerateFutureReminders(Long courseId);
     Course deactivateCourse(Long courseId);

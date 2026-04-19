@@ -132,114 +132,142 @@ public class CourseServiceImpl implements CourseService {
         return generateRemindersInternal(course, true);
     }
 
-    @Override
-    @Transactional
-    public Course deactivateCourse(Long courseId) {
-        Course course = findById(courseId);
-        course.setActive(false);
-        courseRepository.save(course);
+@Override
+@Transactional
+public void deleteCourse(Long courseId) {
+    Course course = findById(courseId);
 
-        List<CourseMedication> meds = courseMedicationRepository.findByCourseIdOrderByIdAsc(courseId);
-        for (CourseMedication med : meds) {
-            med.setActive(false);
-            courseMedicationRepository.save(med);
+    // Получаем все медикаменты курса
+    List<CourseMedication> medications = courseMedicationRepository.findByCourseIdOrderByIdAsc(courseId);
 
-            if (med.getGeneratedMedicineId() != null) {
-                Medicine medicine = medicineService.findById(med.getGeneratedMedicineId());
-                if (medicine != null && medicine.isActive()) {
-                    medicineService.deactivateMedicine(med.getGeneratedMedicineId());
-                }
+    for (CourseMedication med : medications) {
+        // Удаляем все напоминания, связанные с этим медикаментом курса
+        List<Reminder> reminders = reminderRepository.findByCourseMedicationId(med.getId());
+        reminderRepository.deleteAll(reminders);
+
+        // Деактивируем сгенерированный medicine (вместо удаления)
+        if (med.getGeneratedMedicineId() != null) {
+            medicineService.deactivateMedicine(med.getGeneratedMedicineId());
+        }
+    }
+
+    // Удаляем все медикаменты курса
+    courseMedicationRepository.deleteAll(medications);
+
+    // Удаляем сам курс
+    courseRepository.delete(course);
+}
+
+@Override
+@Transactional
+public Course deactivateCourse(Long courseId) {
+    Course course = findById(courseId);
+    course.setActive(false);
+    courseRepository.save(course);
+
+    List<CourseMedication> meds = courseMedicationRepository.findByCourseIdOrderByIdAsc(courseId);
+    OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+    LocalDate today = now.toLocalDate();
+
+    for (CourseMedication med : meds) {
+        med.setActive(false);
+        courseMedicationRepository.save(med);
+
+        if (med.getGeneratedMedicineId() != null) {
+            Medicine medicine = medicineService.findById(med.getGeneratedMedicineId());
+            if (medicine != null && medicine.isActive()) {
+                medicineService.deactivateMedicine(med.getGeneratedMedicineId());
             }
         }
 
-        List<Reminder> reminders = reminderRepository.findByUserIdWithMedicine(course.getUser().getId());
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        // Деактивируем будущие напоминания этого медикамента
+        List<Reminder> reminders = reminderRepository.findByCourseMedicationId(med.getId());
         for (Reminder reminder : reminders) {
-            if (!Boolean.TRUE.equals(reminder.getIsActive())) {
-                continue;
-            }
-            if (reminder.getMedicine() == null) {
-                continue;
-            }
+            LocalDate specificDate = reminder.getSpecificDate();
+            LocalTime reminderTime = reminder.getReminderTime();
 
-            CourseMedication linked = meds.stream()
-                    .filter(m -> m.getGeneratedMedicineId() != null
-                            && m.getGeneratedMedicineId().equals(reminder.getMedicine().getId()))
-                    .findFirst()
-                    .orElse(null);
+            boolean isFuture = specificDate != null && reminderTime != null &&
+                    (specificDate.isAfter(today) ||
+                     (specificDate.isEqual(today) && reminderTime.isAfter(now.toLocalTime())));
 
-            if (linked == null) {
-                continue;
-            }
-
-            String key = reminder.getDaysOfWeek();
-            if (isFutureOccurrence(key, reminder.getReminderTime(), now)) {
+            if (isFuture) {
                 reminder.setActive(false);
                 reminderRepository.save(reminder);
             }
         }
-
-        return course;
     }
 
-    private int generateRemindersInternal(Course course, boolean futureOnly) {
-        List<CourseMedication> medications = courseMedicationRepository.findByCourseIdOrderByIdAsc(course.getId());
-        if (medications.isEmpty()) {
-            return 0;
+    return course;
+}
+
+private int generateRemindersInternal(Course course, boolean futureOnly) {
+    List<CourseMedication> medications = courseMedicationRepository.findByCourseIdOrderByIdAsc(course.getId());
+    if (medications.isEmpty()) {
+        return 0;
+    }
+
+    // Загружаем существующие напоминания курса
+    List<Reminder> existingReminders = reminderRepository.findByUserIdWithMedicine(course.getUser().getId());
+    OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+    LocalDate today = now.toLocalDate();
+    int created = 0;
+
+    for (CourseMedication medication : medications) {
+        if (!Boolean.TRUE.equals(medication.getActive())) {
+            continue;
         }
 
-        List<Reminder> existingReminders = reminderRepository.findByUserIdWithMedicine(course.getUser().getId());
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        LocalDate today = now.toLocalDate();
-        int created = 0;
+        Medicine medicine = resolveMedicineForCourseMedication(medication);
+        if (medicine == null) {
+            continue;
+        }
 
-        for (CourseMedication medication : medications) {
-            if (!Boolean.TRUE.equals(medication.getActive())) {
-                continue;
-            }
+        LocalDate current = course.getStartDate();
+        while (!current.isAfter(course.getEndDate())) {
+            boolean isFuture = current.isAfter(today) ||
+                    (current.isEqual(today) && medication.getTimeOfDay().isAfter(now.toLocalTime()));
 
-            Medicine medicine = resolveMedicineForCourseMedication(medication);
-            if (medicine == null) {
-                continue;
-            }
+            if (!futureOnly || isFuture) {
+                if (matchesSchedule(course.getStartDate(), current, medication)) {
 
-            LocalDate current = course.getStartDate();
-            while (!current.isAfter(course.getEndDate())) {
-                boolean isFuture = current.isAfter(today) || (current.isEqual(today) && medication.getTimeOfDay().isAfter(now.toLocalTime()));
-                if (!futureOnly || isFuture) {
-                    if (matchesSchedule(course.getStartDate(), current, medication)) {
-                        String dateKey = current.toString();
+                    final LocalDate currentDate = current;
 
-                        boolean alreadyExists = existingReminders.stream().anyMatch(r ->
-                                r.getMedicine() != null
-                                        && r.getMedicine().getId().equals(medicine.getId())
-                                        && r.getReminderTime() != null
-                                        && r.getReminderTime().equals(medication.getTimeOfDay())
-                                        && dateKey.equals(r.getDaysOfWeek())
-                                        && Boolean.TRUE.equals(r.getIsActive())
+                    // Проверяем, существует ли уже такое напоминание
+                    boolean alreadyExists = existingReminders.stream().anyMatch(r ->
+                            r.getMedicine() != null &&
+                            r.getMedicine().getId().equals(medicine.getId()) &&
+                            r.getReminderTime() != null &&
+                            r.getReminderTime().equals(medication.getTimeOfDay()) &&
+                            currentDate.equals(r.getSpecificDate()) &&  // ← проверяем по specificDate
+                            r.getCourseMedication() != null &&
+                            r.getCourseMedication().getId().equals(medication.getId()) &&
+                            Boolean.TRUE.equals(r.getIsActive())
+                    );
+
+                    if (!alreadyExists) {
+                        // Используем специальный метод для курсовых напоминаний
+                        Reminder reminder = reminderService.createCourseReminder(
+                                course.getUser().getId(),
+                                medicine.getId(),
+                                medication.getTimeOfDay(),
+                                current,                     // ← specificDate
+                                medication                   // ← связь с CourseMedication
                         );
 
-                        if (!alreadyExists) {
-                            Reminder reminder = reminderService.createReminder(
-                                    course.getUser().getId(),
-                                    medicine.getId(),
-                                    medication.getTimeOfDay(),
-                                    dateKey
-                            );
-                            if (reminder != null) {
-                                created++;
-                                existingReminders.add(reminder);
-                            }
+                        if (reminder != null) {
+                            created++;
+                            existingReminders.add(reminder);
                         }
                     }
                 }
-
-                current = current.plusDays(1);
             }
-        }
 
-        return created;
+            current = current.plusDays(1);
+        }
     }
+
+    return created;
+}
 
     private Medicine resolveMedicineForCourseMedication(CourseMedication medication) {
         if (medication.getGeneratedMedicineId() != null) {
@@ -296,34 +324,35 @@ public class CourseServiceImpl implements CourseService {
         return diff >= 0 && diff % step == 0;
     }
 
-    private void deleteFutureGeneratedReminders(Course course) {
-        List<CourseMedication> meds = courseMedicationRepository.findByCourseIdOrderByIdAsc(course.getId());
-        List<Reminder> reminders = reminderRepository.findByUserIdWithMedicine(course.getUser().getId());
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+private void deleteFutureGeneratedReminders(Course course) {
+    List<CourseMedication> meds = courseMedicationRepository.findByCourseIdOrderByIdAsc(course.getId());
+    OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+    LocalDate today = now.toLocalDate();
+
+    for (CourseMedication medication : meds) {
+        // Находим все напоминания этого медикамента в курсе
+        List<Reminder> reminders = reminderRepository.findByCourseMedicationId(medication.getId());
 
         for (Reminder reminder : reminders) {
             if (!Boolean.TRUE.equals(reminder.getIsActive())) {
                 continue;
             }
-            if (reminder.getMedicine() == null) {
-                continue;
-            }
 
-            CourseMedication linked = meds.stream()
-                    .filter(m -> m.getGeneratedMedicineId() != null
-                            && m.getGeneratedMedicineId().equals(reminder.getMedicine().getId()))
-                    .findFirst()
-                    .orElse(null);
+            LocalDate specificDate = reminder.getSpecificDate();
+            LocalTime reminderTime = reminder.getReminderTime();
 
-            if (linked == null) {
-                continue;
-            }
+            // Удаляем только будущие
+            if (specificDate != null && reminderTime != null) {
+                boolean isFuture = specificDate.isAfter(today) ||
+                        (specificDate.isEqual(today) && reminderTime.isAfter(now.toLocalTime()));
 
-            if (isFutureOccurrence(reminder.getDaysOfWeek(), reminder.getReminderTime(), now)) {
-                reminderRepository.deleteById(reminder.getId());
+                if (isFuture) {
+                    reminderRepository.delete(reminder);
+                }
             }
         }
     }
+}
 
     private boolean isFutureOccurrence(String dateKey, LocalTime timeOfDay, OffsetDateTime now) {
         if (dateKey == null || !DATE_KEY.matcher(dateKey).matches() || timeOfDay == null) {

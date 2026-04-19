@@ -68,3 +68,16 @@ CREATE TABLE course_medications (
     created_at TIMESTAMP,
     updated_at TIMESTAMP
 );
+ALTER TABLE reminders ADD COLUMN course_medication_id BIGINT REFERENCES course_medications(id);
+ALTER TABLE medicine_history
+  DROP CONSTRAINT medicine_history_reminder_id_fkey,
+  ADD CONSTRAINT medicine_history_reminder_id_fkey
+      FOREIGN KEY (reminder_id) REFERENCES reminders(id) ON DELETE CASCADE;
+ALTER TABLE reminders ADD COLUMN specific_date DATE;
+CREATE INDEX idx_reminders_specific_date ON reminders(specific_date) WHERE specific_date IS NOT NULL;
+
+-- Для поиска активных напоминаний
+CREATE INDEX idx_reminders_active ON reminders(is_active) WHERE is_active = true;
+
+-- Для связи с course_medication
+CREATE INDEX idx_reminders_course_medication ON reminders(course_medication_id) WHERE course_medication_id IS NOT NULL;

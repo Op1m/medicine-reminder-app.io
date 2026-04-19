@@ -32,6 +32,15 @@ public class CourseController {
         return ResponseEntity.ok(courseService.findById(courseId));
     }
 
+    @DeleteMapping("/{courseId}")
+public ResponseEntity<Map<String, Object>> deleteCourse(@PathVariable Long courseId) {
+    courseService.deleteCourse(courseId);
+    Map<String, Object> response = new HashMap<>();
+    response.put("courseId", courseId);
+    response.put("deleted", true);
+    return ResponseEntity.ok(response);
+}
+
     @PostMapping
     public ResponseEntity<Course> createCourse(@RequestBody CreateCourseRequest request) {
         Course course = courseService.createCourse(
