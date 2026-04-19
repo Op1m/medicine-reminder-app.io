@@ -220,6 +220,7 @@ public Course deactivateCourse(Long courseId) {
 private int generateRemindersInternal(Course course, boolean futureOnly) {
     List<CourseMedication> medications = courseMedicationRepository.findByCourseIdOrderByIdAsc(course.getId());
     if (medications.isEmpty()) {
+        System.out.println("No medications found for course " + course.getId());
         return 0;
     }
 
@@ -231,12 +232,14 @@ private int generateRemindersInternal(Course course, boolean futureOnly) {
     int created = 0;
 
     for (CourseMedication medication : medications) {
+        System.out.println("Processing medication: " + medication.getId() + " " + medication.getMedicineName());
         if (!Boolean.TRUE.equals(medication.getActive())) {
             continue;
         }
 
         Medicine medicine = resolveMedicineForCourseMedication(medication);
         if (medicine == null) {
+            System.out.println("Processing medication: " + medication.getId() + " " + medication.getMedicineName());
             continue;
         }
 
@@ -247,6 +250,7 @@ private int generateRemindersInternal(Course course, boolean futureOnly) {
 
             if (!futureOnly || isFuture) {
                 if (matchesSchedule(course.getStartDate(), current, medication)) {
+                    System.out.println("Date " + current + " matches schedule");
                     final LocalDate currentDate = current;
 
                     // Безопасная проверка существования
