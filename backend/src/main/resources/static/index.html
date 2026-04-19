@@ -2416,7 +2416,7 @@ function optimisticPostponeReminder(reminderId, card) {
 
     // Обновляем карточку
     if (card) {
-        const serverPostponedTime = new Date(data.scheduledTime + 'Z');
+const serverPostponedTime = parseIsoSafe(data.scheduledTime);
         const statusSpan = card.querySelector('.med-status');
         if (statusSpan) {
             statusSpan.innerHTML = `<span class="status-postponed status-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#3498db" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Отложено до ${serverPostponedTime.getHours()}:${serverPostponedTime.getMinutes().toString().padStart(2, '0')}</span>`;
@@ -2666,6 +2666,11 @@ function optimisticPostponeReminder(reminderId, card) {
     }
 }
 
+function parseIsoSafe(value) {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function getStatusForReminderOnDate(reminder, date) {
     const dateKey = date.toISOString().split('T')[0];
     let histories = historyMap.get(dateKey) || [];
@@ -2804,7 +2809,7 @@ function renderGroupsForDate(date) {
                         statusHtml = `<span class="status-missed status-icon"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none"><path d="M18 6L6 18M6 6l12 12"/></svg> Пропущено</span>`;
                     } else if (status === 'postponed') {
                         const historyEntry = getHistoryForReminder(r, date);
-                        const postponedTime = historyEntry ? new Date(historyEntry.scheduledTime + 'Z') : new Date(Date.now() + 10*60000);
+const postponedTime = historyEntry ? parseIsoSafe(historyEntry.scheduledTime) : new Date(Date.now() + 10 * 60000);
                         statusHtml = `<span class="status-postponed status-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#3498db" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Отложено до ${postponedTime.getHours()}:${postponedTime.getMinutes().toString().padStart(2, '0')}</span>`;
                     } else {
                         statusHtml = `<span class="status-pending status-icon"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" style="display: inline-block; vertical-align: middle; margin-right: 4px;"><path d="M12 7V12L13.5 14.5M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="#7a8fa8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Ожидается</span>`;

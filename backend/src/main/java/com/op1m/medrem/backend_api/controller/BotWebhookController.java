@@ -157,8 +157,6 @@ public class BotWebhookController {
 
             editMessagePostponed(chatId, messageId, reminderId, minutes);
 
-            sendSuccessNotification(chatId, "⏰ Напоминание отложено на " + minutes + " минут");
-
         } catch (Exception e) {
             System.err.println("❌ Ошибка откладывания: " + e.getMessage());
             e.printStackTrace();

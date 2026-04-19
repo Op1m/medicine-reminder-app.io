@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -132,45 +133,35 @@ public MedicineHistory markAsSkipped(Long historyId) {
     }
 
     @Override
-    @Transactional
-    public MedicineHistory postponeReminder(Long reminderId, Long chatId, int minutes) {
-        Reminder reminder = reminderRepository.findById(reminderId)
-                .orElseThrow(() -> new RuntimeException("Reminder not found: " + reminderId));
+    // MedicineHistoryServiceImpl.postponeReminder(...)
+@Transactional
+public MedicineHistory postponeReminder(Long reminderId, Long chatId, int minutes) {
+    Reminder reminder = reminderRepository.findById(reminderId)
+            .orElseThrow(() -> new RuntimeException("Reminder not found: " + reminderId));
 
-        if (!reminder.getUser().getTelegramChatId().equals(chatId)) {
-            throw new RuntimeException("Chat ID does not match reminder owner");
-        }
-
-        LocalDate today = LocalDate.now(ZoneOffset.UTC);
-        OffsetDateTime startOfDay = today.atStartOfDay().atOffset(ZoneOffset.UTC);
-        OffsetDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
-
-        List<MedicineHistory> todayHistories = historyRepository.findByUserAndPeriod(reminder.getUser(), startOfDay, endOfDay);
-        MedicineHistory existingHistory = todayHistories.stream()
-                .filter(h -> h.getReminder().getId().equals(reminderId))
-                .findFirst()
-                .orElse(null);
-
-        if (existingHistory != null && existingHistory.getStatus() == MedicineStatus.PENDING) {
-            existingHistory.setStatus(MedicineStatus.POSTPONED);
-            existingHistory.setNotes("Отложено на " + minutes + " минут");
-            historyRepository.save(existingHistory);
-        } else if (existingHistory == null) {
-            OffsetDateTime scheduledTime = today.atTime(reminder.getReminderTime()).atOffset(ZoneOffset.UTC);
-            MedicineHistory newPostponed = new MedicineHistory(reminder, scheduledTime);
-            newPostponed.setStatus(MedicineStatus.POSTPONED);
-            newPostponed.setNotes("Отложено на " + minutes + " минут");
-            historyRepository.save(newPostponed);
-        }
-
-        OffsetDateTime newScheduledTime = OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(minutes);
-        MedicineHistory delayedReminder = new MedicineHistory(reminder, newScheduledTime);
-        delayedReminder.setStatus(MedicineStatus.PENDING);
-        delayedReminder.setNotes("Повторное напоминание после откладывания");
-        MedicineHistory savedDelayed = historyRepository.save(delayedReminder);
-
-        return savedDelayed;
+    if (!reminder.getUser().getTelegramChatId().equals(chatId)) {
+        throw new RuntimeException("Chat ID does not match reminder owner");
     }
+
+    OffsetDateTime newTime = OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(minutes);
+
+    OffsetDateTime startOfDay = LocalDate.now(ZoneOffset.UTC).atStartOfDay().atOffset(ZoneOffset.UTC);
+    OffsetDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
+
+    List<MedicineHistory> todayHistories =
+            historyRepository.findByUserAndPeriod(reminder.getUser(), startOfDay, endOfDay);
+
+    MedicineHistory history = todayHistories.stream()
+            .filter(h -> h.getReminder().getId().equals(reminderId))
+            .max(Comparator.comparing(MedicineHistory::getCreatedAt))
+            .orElse(new MedicineHistory(reminder, newTime));
+
+    history.setScheduledTime(newTime);
+    history.setStatus(MedicineStatus.POSTPONED);
+    history.setNotes("Отложено на " + minutes + " минут");
+
+    return historyRepository.save(history);
+}
 
     @Override
 @Transactional

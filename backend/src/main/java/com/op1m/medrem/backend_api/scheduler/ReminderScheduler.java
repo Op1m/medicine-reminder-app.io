@@ -2,6 +2,7 @@ package com.op1m.medrem.backend_api.scheduler;
 
 import com.op1m.medrem.backend_api.entity.MedicineHistory;
 import com.op1m.medrem.backend_api.entity.Reminder;
+import com.op1m.medrem.backend_api.entity.enums.MedicineStatus;
 import com.op1m.medrem.backend_api.service.MedicineHistoryService;
 import com.op1m.medrem.backend_api.service.NotificationService;
 import com.op1m.medrem.backend_api.service.ReminderService;
@@ -31,27 +32,31 @@ public class ReminderScheduler {
     public void checkDueReminders() {
         System.out.println("Проверка напоминаний... " + OffsetDateTime.now(ZoneOffset.UTC));
 
-        List<Reminder> dueReminders = reminderService.getDueReminders();
+List<Reminder> dueReminders = reminderService.getDueReminders();
+OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+OffsetDateTime startOfDay = now.toLocalDate().atStartOfDay().atOffset(ZoneOffset.UTC);
+OffsetDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
 
-        for (Reminder reminder : dueReminders) {
-            System.out.println("Время принять: " +
-                    reminder.getMedicine().getName() +
-                    " (" + reminder.getMedicine().getDosage() + ")" +
-                    " - Пользователь: " + reminder.getUser().getUsername() +
-                    " - Время: " + reminder.getReminderTime());
+for (Reminder reminder : dueReminders) {
+    boolean alreadyExists = medicineHistoryService
+            .getHistoryByPeriod(reminder.getUser().getId(), startOfDay, endOfDay)
+            .stream()
+            .anyMatch(h -> h.getReminder().getId().equals(reminder.getId())
+                    && (h.getStatus() == MedicineStatus.PENDING
+                        || h.getStatus() == MedicineStatus.POSTPONED
+                        || h.getStatus() == MedicineStatus.TAKEN
+                        || h.getStatus() == MedicineStatus.SKIPPED
+                        || h.getStatus() == MedicineStatus.MISSED));
 
-            MedicineHistory history = createHistoryRecord(reminder);
+    if (alreadyExists) {
+        continue;
+    }
 
-            if (history != null) {
-                notificationService.notifyUser(reminder);
-            }
-        }
-
-        System.out.println("Найдено напоминаний: " + dueReminders.size());
-
-        medicineHistoryService.checkPostponedReminders();
-
-        medicineHistoryService.checkAndMarkMissedDoses();
+    MedicineHistory history = medicineHistoryService.createScheduleDose(reminder.getId(), now);
+    if (history != null) {
+        notificationService.notifyUser(reminder);
+    }
+}
     }
 
     private MedicineHistory createHistoryRecord(Reminder reminder) {
