@@ -189,30 +189,29 @@ public Reminder createCourseReminder(Long userId, Long medicineId, LocalTime rem
         }
     }
 
-    @Override
+@Override
 public boolean shouldNotifyNow(Reminder reminder) {
     OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-    LocalTime rt = reminder.getReminderTime();
-    LocalTime reminderTimeUTC = rt.minusHours(7);
+    LocalTime currentTime = now.toLocalTime().withSecond(0).withNano(0);
 
-    boolean timeMatches = now.getHour() == reminderTimeUTC.getHour()
-                       && now.getMinute() == reminderTimeUTC.getMinute();
-
-    // 👇 ПРОВЕРКА ДЛЯ КУРСОВЫХ НАПОМИНАНИЙ
-    if (reminder.getSpecificDate() != null) {
-        // Курсовое напоминание - проверяем конкретную дату
-        LocalDate today = now.toLocalDate();
-        boolean dateMatches = reminder.getSpecificDate().equals(today);
-
-        logger.debug("Course reminder {}: specificDate={}, today={}, matches={}",
-                    reminder.getId(), reminder.getSpecificDate(), today, dateMatches);
-
-        return timeMatches && dateMatches;
+    if (reminder.getReminderTime() == null) {
+        return false;
     }
 
-    // Обычное напоминание
-    boolean dayMatches = checkDayOfWeek(reminder, now);
-    return timeMatches && dayMatches;
+    LocalTime reminderTime = reminder.getReminderTime().withSecond(0).withNano(0);
+    boolean timeMatches = reminderTime.equals(currentTime);
+
+    if (reminder.getSpecificDate() != null) {
+        return timeMatches && reminder.getSpecificDate().equals(now.toLocalDate());
+    }
+
+    String daysOfWeek = reminder.getDaysOfWeek();
+    if (daysOfWeek == null || daysOfWeek.equals("everyday")) {
+        return timeMatches;
+    }
+
+    int currentDay = now.getDayOfWeek().getValue();
+    return timeMatches && daysOfWeek.contains(String.valueOf(currentDay));
 }
 
 private boolean checkDayOfWeek(Reminder reminder, OffsetDateTime now) {
