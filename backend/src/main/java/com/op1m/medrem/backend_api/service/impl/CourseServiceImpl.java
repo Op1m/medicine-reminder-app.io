@@ -220,40 +220,48 @@ public Course deactivateCourse(Long courseId) {
 private int generateRemindersInternal(Course course, boolean futureOnly) {
     List<CourseMedication> medications = courseMedicationRepository.findByCourseIdOrderByIdAsc(course.getId());
     if (medications.isEmpty()) {
-        System.out.println("No medications found for course " + course.getId());
+        System.out.println("❌ No medications found for course " + course.getId());
         return 0;
     }
 
-    // Загружаем только напоминания этого курса
     List<Reminder> existingReminders = reminderRepository.findByCourseMedication_Course_Id(course.getId());
+    System.out.println("📋 Found " + existingReminders.size() + " existing reminders for course " + course.getId());
 
     OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
     LocalDate today = now.toLocalDate();
     int created = 0;
 
     for (CourseMedication medication : medications) {
-        System.out.println("Processing medication: " + medication.getId() + " " + medication.getMedicineName());
         if (!Boolean.TRUE.equals(medication.getActive())) {
+            System.out.println("⏭️ Skipping inactive medication: " + medication.getId());
             continue;
         }
+
+        System.out.println("💊 Processing medication: " + medication.getId() + " - " + medication.getMedicineName());
 
         Medicine medicine = resolveMedicineForCourseMedication(medication);
         if (medicine == null) {
-            System.out.println("Processing medication: " + medication.getId() + " " + medication.getMedicineName());
+            System.out.println("❌ Failed to resolve medicine for medication " + medication.getId());
             continue;
         }
+        System.out.println("✅ Medicine resolved: " + medicine.getId() + " - " + medicine.getName());
 
         LocalDate current = course.getStartDate();
+        int daysProcessed = 0;
+        int matchesFound = 0;
+        int alreadyExisted = 0;
+        int createdSuccessfully = 0;
+
         while (!current.isAfter(course.getEndDate())) {
             boolean isFuture = current.isAfter(today) ||
                     (current.isEqual(today) && medication.getTimeOfDay().isAfter(now.toLocalTime()));
 
             if (!futureOnly || isFuture) {
                 if (matchesSchedule(course.getStartDate(), current, medication)) {
-                    System.out.println("Date " + current + " matches schedule");
+                    matchesFound++;
                     final LocalDate currentDate = current;
 
-                    // Безопасная проверка существования
+                    // Проверяем существование
                     boolean alreadyExists = false;
                     for (Reminder r : existingReminders) {
                         if (r.getMedicine() != null &&
@@ -265,29 +273,50 @@ private int generateRemindersInternal(Course course, boolean futureOnly) {
                             r.getCourseMedication().getId().equals(medication.getId()) &&
                             Boolean.TRUE.equals(r.getIsActive())) {
                             alreadyExists = true;
+                            alreadyExisted++;
                             break;
                         }
                     }
 
                     if (!alreadyExists) {
-                        Reminder reminder = reminderService.createCourseReminder(
-                                course.getUser().getId(),
-                                medicine.getId(),
-                                medication.getTimeOfDay(),
-                                current,
-                                medication
-                        );
+                        System.out.println("🔨 Creating reminder for date: " + currentDate + " at " + medication.getTimeOfDay());
 
-                        if (reminder != null) {
-                            created++;
-                            existingReminders.add(reminder);
+                        try {
+                            Reminder reminder = reminderService.createCourseReminder(
+                                    course.getUser().getId(),
+                                    medicine.getId(),
+                                    medication.getTimeOfDay(),
+                                    current,
+                                    medication
+                            );
+
+                            if (reminder != null) {
+                                created++;
+                                createdSuccessfully++;
+                                existingReminders.add(reminder);
+                                System.out.println("✅ Reminder created successfully with ID: " + reminder.getId());
+                            } else {
+                                System.out.println("❌ Reminder creation returned null for date: " + currentDate);
+                            }
+                        } catch (Exception e) {
+                            System.out.println("💥 Exception creating reminder: " + e.getMessage());
+                            e.printStackTrace();
                         }
                     }
                 }
             }
             current = current.plusDays(1);
+            daysProcessed++;
         }
+
+        System.out.println("📊 Stats for medication " + medication.getId() + ":");
+        System.out.println("   Days processed: " + daysProcessed);
+        System.out.println("   Matches found: " + matchesFound);
+        System.out.println("   Already existed: " + alreadyExisted);
+        System.out.println("   Created successfully: " + createdSuccessfully);
     }
+
+    System.out.println("🎯 Total reminders created: " + created);
     return created;
 }
 
