@@ -89,6 +89,33 @@ public ResponseEntity<Course> updateCourse(@PathVariable Long courseId,
         return ResponseEntity.ok(response);
     }
 
+    @DeleteMapping("/{courseId}/medications/{medicationId}")
+public ResponseEntity<Map<String, Object>> deleteMedication(
+        @PathVariable Long courseId,
+        @PathVariable Long medicationId) {
+
+    courseService.deleteMedicationFromCourse(courseId, medicationId);
+
+    Map<String, Object> response = new HashMap<>();
+    response.put("courseId", courseId);
+    response.put("medicationId", medicationId);
+    response.put("deleted", true);
+    return ResponseEntity.ok(response);
+}
+
+// Обновление препарата в курсе
+@PutMapping("/{courseId}/medications/{medicationId}")
+public ResponseEntity<CourseMedication> updateMedication(
+        @PathVariable Long courseId,
+        @PathVariable Long medicationId,
+        @RequestBody CreateCourseMedicationRequest request) {
+
+    CourseMedication medication = courseService.updateMedicationInCourse(
+            courseId, medicationId, request);
+
+    return ResponseEntity.ok(medication);
+}
+
     @PostMapping("/{courseId}/regenerate-future-reminders")
     public ResponseEntity<Map<String, Object>> regenerateFutureReminders(@PathVariable Long courseId) {
         int created = courseService.regenerateFutureReminders(courseId);

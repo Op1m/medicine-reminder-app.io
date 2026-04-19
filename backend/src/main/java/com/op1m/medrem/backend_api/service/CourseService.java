@@ -1,5 +1,6 @@
 package com.op1m.medrem.backend_api.service;
 
+import com.op1m.medrem.backend_api.controller.CourseController;
 import com.op1m.medrem.backend_api.entity.Course;
 import com.op1m.medrem.backend_api.entity.CourseMedication;
 
@@ -16,4 +17,8 @@ Course updateCourse(Long courseId, String name, LocalDate startDate, LocalDate e
     int generateRemindersForCourse(Long courseId);
     int regenerateFutureReminders(Long courseId);
     Course deactivateCourse(Long courseId);
+    void deleteMedicationFromCourse(Long courseId, Long medicationId);
+
+    CourseMedication updateMedicationInCourse(Long courseId, Long medicationId,
+                                              CourseController.CreateCourseMedicationRequest request);
 }

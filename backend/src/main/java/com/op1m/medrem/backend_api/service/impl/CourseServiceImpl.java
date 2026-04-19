@@ -1,5 +1,6 @@
 package com.op1m.medrem.backend_api.service.impl;
 
+import com.op1m.medrem.backend_api.controller.CourseController;
 import com.op1m.medrem.backend_api.entity.*;
 import com.op1m.medrem.backend_api.entity.enums.CourseScheduleType;
 import com.op1m.medrem.backend_api.entity.enums.MealMode;
@@ -142,24 +143,31 @@ private MedicineHistoryRepository medicineHistoryRepository;
 public void deleteCourse(Long courseId) {
     Course course = findById(courseId);
 
-    // Получаем все медикаменты курса
     List<CourseMedication> medications = courseMedicationRepository.findByCourseIdOrderByIdAsc(courseId);
 
     for (CourseMedication med : medications) {
-        // Удаляем все напоминания, связанные с этим медикаментом курса
+        // Находим все напоминания
         List<Reminder> reminders = reminderRepository.findByCourseMedicationId(med.getId());
+
+        for (Reminder reminder : reminders) {
+            // 👇 СНАЧАЛА УДАЛЯЕМ ИСТОРИЮ
+            medicineHistoryRepository.deleteByReminderId(reminder.getId());
+        }
+
+        // 👇 ПОТОМ УДАЛЯЕМ НАПОМИНАНИЯ
         reminderRepository.deleteAll(reminders);
 
-        // Деактивируем сгенерированный medicine (вместо удаления)
+        // Деактивируем medicine
         if (med.getGeneratedMedicineId() != null) {
-            medicineService.deactivateMedicine(med.getGeneratedMedicineId());
+            Medicine medicine = medicineService.findById(med.getGeneratedMedicineId());
+            if (medicine != null) {
+                medicine.setActive(false);
+                // Не удаляем, а сохраняем
+            }
         }
     }
 
-    // Удаляем все медикаменты курса
     courseMedicationRepository.deleteAll(medications);
-
-    // Удаляем сам курс
     courseRepository.delete(course);
 }
 
@@ -220,6 +228,66 @@ public Course deactivateCourse(Long courseId) {
     }
 
     return course;
+}
+
+@Override
+@Transactional
+public void deleteMedicationFromCourse(Long courseId, Long medicationId) {
+    CourseMedication medication = courseMedicationRepository.findById(medicationId)
+            .orElseThrow(() -> new RuntimeException("Medication not found: " + medicationId));
+
+    // Проверяем, что препарат принадлежит этому курсу
+    if (!medication.getCourse().getId().equals(courseId)) {
+        throw new RuntimeException("Medication does not belong to this course");
+    }
+
+    // Удаляем все связанные напоминания
+    List<Reminder> reminders = reminderRepository.findByCourseMedicationId(medicationId);
+    for (Reminder reminder : reminders) {
+        // Сначала удаляем историю
+        medicineHistoryRepository.deleteByReminderId(reminder.getId());
+    }
+    reminderRepository.deleteAll(reminders);
+
+    // Деактивируем сгенерированное лекарство
+    if (medication.getGeneratedMedicineId() != null) {
+        medicineService.deactivateMedicine(medication.getGeneratedMedicineId());
+    }
+
+    // Удаляем сам препарат
+    courseMedicationRepository.delete(medication);
+
+    System.out.println("✅ Препарат " + medicationId + " удалён из курса " + courseId);
+}
+
+@Override
+@Transactional
+public CourseMedication updateMedicationInCourse(Long courseId, Long medicationId,
+                                                  CourseController.CreateCourseMedicationRequest request) {
+    CourseMedication medication = courseMedicationRepository.findById(medicationId)
+            .orElseThrow(() -> new RuntimeException("Medication not found: " + medicationId));
+
+    // Проверяем принадлежность к курсу
+    if (!medication.getCourse().getId().equals(courseId)) {
+        throw new RuntimeException("Medication does not belong to this course");
+    }
+
+    // Обновляем поля
+    medication.setMedicineName(request.getMedicineName());
+    medication.setDosage(request.getDosage());
+    medication.setDescription(request.getDescription());
+    medication.setInstructions(request.getInstructions());
+    medication.setMealMode(request.getMealMode());
+    medication.setTimeOfDay(request.getTimeOfDay());
+    medication.setScheduleType(request.getScheduleType());
+    medication.setIntervalDays(request.getIntervalDays());
+
+    CourseMedication saved = courseMedicationRepository.save(medication);
+
+    // Перегенерируем будущие напоминания
+    regenerateFutureReminders(courseId);
+
+    return saved;
 }
 
 private int generateRemindersInternal(Course course, boolean futureOnly) {
@@ -296,7 +364,8 @@ private int generateRemindersInternal(Course course, boolean futureOnly) {
                             );
 
                             if (reminder != null) {
-OffsetDateTime scheduledDateTime = currentDate.atTime(medication.getTimeOfDay())
+        // 👇 ДОБАВЬТЕ ЭТО: создаём запись в истории
+        OffsetDateTime scheduledDateTime = currentDate.atTime(medication.getTimeOfDay())
                 .atOffset(ZoneOffset.UTC);
         MedicineHistory history = new MedicineHistory(reminder, scheduledDateTime);
         history.setStatus(MedicineStatus.PENDING);
@@ -305,8 +374,7 @@ OffsetDateTime scheduledDateTime = currentDate.atTime(medication.getTimeOfDay())
         created++;
         createdSuccessfully++;
         existingReminders.add(reminder);
-                                System.out.println("✅ Reminder created successfully with ID: " + reminder.getId());
-                            } else {
+    } else {
                                 System.out.println("❌ Reminder creation returned null for date: " + currentDate);
                             }
                         } catch (Exception e) {
