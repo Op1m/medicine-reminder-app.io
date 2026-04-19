@@ -253,23 +253,29 @@ public void markReminderAsTakenByBot(Long reminderId, Long chatId) {
 @Transactional
 public void checkPostponedReminders() {
     OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-    OffsetDateTime oneMinuteAgo = now.minusMinutes(1);
-    OffsetDateTime oneHourAhead = now.plusHours(1);
 
-    List<MedicineHistory> pendingReminders = historyRepository.findByStatusAndScheduledTimeBetween(
-            MedicineStatus.PENDING, oneMinuteAgo, oneHourAhead);
+    // Ищем именно POSTPONED, у которых время уже наступило
+    List<MedicineHistory> postponedHistories =
+            historyRepository.findByStatusAndScheduledTimeBefore(
+                    MedicineStatus.POSTPONED, now
+            );
 
-    for (MedicineHistory history : pendingReminders) {
-        System.out.println("⏰ Активация напоминания ID: " + history.getId() +
-            ", запланированное время: " + history.getScheduledTime());
-
+    for (MedicineHistory history : postponedHistories) {
         Reminder reminder = history.getReminder();
-        if (reminder != null) {
-            notificationService.notifyUser(reminder);
-            System.out.println("📢 Отправлено уведомление для напоминания: " + reminder.getId());
-
-            historyRepository.delete(history);
+        if (reminder == null) {
+            continue;
         }
+
+        // Отправляем повторное напоминание с кнопками через NotificationService
+        notificationService.notifyUser(reminder);
+
+        // ВАЖНО:
+        // после повторной отправки переводим запись в PENDING,
+        // чтобы через 10 минут checkAndMarkMissedDoses() пометил её как missed,
+        // если пользователь ничего не нажал.
+        history.setStatus(MedicineStatus.PENDING);
+        history.setScheduledTime(now);
+        historyRepository.save(history);
     }
 }
 }

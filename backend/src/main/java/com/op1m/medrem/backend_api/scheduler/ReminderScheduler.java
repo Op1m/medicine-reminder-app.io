@@ -28,36 +28,48 @@ public class ReminderScheduler {
     private NotificationService notificationService;
 
     @Scheduled(cron = "0 * * * * *")
-    @Transactional
-    public void checkDueReminders() {
-        System.out.println("Проверка напоминаний... " + OffsetDateTime.now(ZoneOffset.UTC));
+@Transactional
+public void checkDueReminders() {
+    System.out.println("Проверка напоминаний... " + OffsetDateTime.now(ZoneOffset.UTC));
+    List<Reminder> dueReminders = reminderService.getDueReminders();
+    OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
 
-List<Reminder> dueReminders = reminderService.getDueReminders();
-OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-OffsetDateTime startOfDay = now.toLocalDate().atStartOfDay().atOffset(ZoneOffset.UTC);
-OffsetDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
+    OffsetDateTime startOfDay = now.toLocalDate().atStartOfDay().atOffset(ZoneOffset.UTC);
+    OffsetDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
 
-for (Reminder reminder : dueReminders) {
-    boolean alreadyExists = medicineHistoryService
-            .getHistoryByPeriod(reminder.getUser().getId(), startOfDay, endOfDay)
-            .stream()
-            .anyMatch(h -> h.getReminder().getId().equals(reminder.getId())
-                    && (h.getStatus() == MedicineStatus.PENDING
+    for (Reminder reminder : dueReminders) {
+        boolean alreadyExists = medicineHistoryService
+                .getHistoryByPeriod(reminder.getUser().getId(), startOfDay, endOfDay)
+                .stream()
+                .anyMatch(h -> h.getReminder().getId().equals(reminder.getId())
+                        && (h.getStatus() == MedicineStatus.PENDING
                         || h.getStatus() == MedicineStatus.POSTPONED
                         || h.getStatus() == MedicineStatus.TAKEN
                         || h.getStatus() == MedicineStatus.SKIPPED
                         || h.getStatus() == MedicineStatus.MISSED));
 
-    if (alreadyExists) {
-        continue;
-    }
+        if (alreadyExists) {
+            continue;
+        }
 
-    MedicineHistory history = medicineHistoryService.createScheduleDose(reminder.getId(), now);
-    if (history != null) {
-        notificationService.notifyUser(reminder);
+        MedicineHistory history = medicineHistoryService.createScheduleDose(reminder.getId(), now);
+        if (history != null) {
+            notificationService.notifyUser(reminder);
+        }
     }
 }
-    }
+
+@Scheduled(cron = "5 * * * * *")
+@Transactional
+public void checkPostponedReminders() {
+    medicineHistoryService.checkPostponedReminders();
+}
+
+@Scheduled(cron = "10 * * * * *")
+@Transactional
+public void checkMissedDoses() {
+    medicineHistoryService.checkAndMarkMissedDoses();
+}
 
     private MedicineHistory createHistoryRecord(Reminder reminder) {
         try {

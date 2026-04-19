@@ -203,37 +203,37 @@ public class BotWebhookController {
         }
     }
 
-    private void editMessagePostponed(Long chatId, Integer messageId, Long reminderId, int minutes) {
-        String url = "https://api.telegram.org/bot" + botToken + "/editMessageText";
+private void editMessagePostponed(Long chatId, Integer messageId, Long reminderId, int minutes) {
+    String url = "https://api.telegram.org/bot" + botToken + "/editMessageText";
 
-        Map<String, Object> body = new HashMap<>();
-        body.put("chat_id", chatId);
-        body.put("message_id", messageId);
-        body.put("text", String.format(
-                "⏰ Напоминание отложено на %d минут. Я напомню снова через %d минут.\n\n" +
-                "А пока можешь отметить сейчас:",
-                minutes, minutes
-        ));
+    Map<String, Object> body = new HashMap<>();
+    body.put("chat_id", chatId);
+    body.put("message_id", messageId);
+    body.put("text", String.format(
+            "⏰ Напоминание отложено на %d минут. Я напомню снова через %d минут.\n\n" +
+            "А пока можешь отметить сейчас:",
+            minutes, minutes
+    ));
 
-        Map<String, Object> replyMarkup = new HashMap<>();
-        replyMarkup.put("inline_keyboard", new Object[][]{
-                {
+    Map<String, Object> replyMarkup = new HashMap<>();
+    replyMarkup.put("inline_keyboard", new Object[][]{
+            {
                     Map.of("text", "✅ Принять сейчас", "callback_data", "take_" + reminderId),
                     Map.of("text", "❌ Пропустить", "callback_data", "skip_" + reminderId)
-                }
-        });
-        body.put("reply_markup", replyMarkup);
+            }
+    });
+    body.put("reply_markup", replyMarkup);
 
-        try {
-            restTemplate.postForEntity(url, body, String.class);
-            System.out.println("✅ editMessagePostponed успешно");
+    try {
+        restTemplate.postForEntity(url, body, String.class);
+        System.out.println("✅ editMessagePostponed успешно");
 
-            scheduleMessageExpiration(chatId, messageId, minutes);
-
-        } catch (Exception e) {
-            System.err.println("❌ Ошибка editMessagePostponed: " + e.getMessage());
-        }
+        // scheduleMessageExpiration(...) УБРАТЬ
+        // Повторное уведомление и дальнейший missed теперь делает scheduler.
+    } catch (Exception e) {
+        System.err.println("❌ Ошибка editMessagePostponed: " + e.getMessage());
     }
+}
 
     private void sendSuccessNotification(Long chatId, String message) {
         String url = "https://api.telegram.org/bot" + botToken + "/sendMessage";
