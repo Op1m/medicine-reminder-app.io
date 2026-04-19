@@ -132,8 +132,7 @@ public MedicineHistory markAsSkipped(Long historyId) {
         historyRepository.saveAll(pendingHistories);
     }
 
-    @Override
-    // MedicineHistoryServiceImpl.postponeReminder(...)
+@Override
 @Transactional
 public MedicineHistory postponeReminder(Long reminderId, Long chatId, int minutes) {
     Reminder reminder = reminderRepository.findById(reminderId)
@@ -145,11 +144,19 @@ public MedicineHistory postponeReminder(Long reminderId, Long chatId, int minute
 
     OffsetDateTime newTime = OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(minutes);
 
-    OffsetDateTime startOfDay = LocalDate.now(ZoneOffset.UTC).atStartOfDay().atOffset(ZoneOffset.UTC);
+    // 👇 ДЛЯ КУРСОВЫХ ИСПОЛЬЗУЕМ specificDate
+    LocalDate targetDate;
+    if (reminder.getSpecificDate() != null) {
+        targetDate = reminder.getSpecificDate();
+    } else {
+        targetDate = LocalDate.now(ZoneOffset.UTC);
+    }
+
+    OffsetDateTime startOfDay = targetDate.atStartOfDay().atOffset(ZoneOffset.UTC);
     OffsetDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
 
-    List<MedicineHistory> todayHistories =
-            historyRepository.findByUserAndPeriod(reminder.getUser(), startOfDay, endOfDay);
+    List<MedicineHistory> todayHistories = historyRepository.findByUserAndPeriod(
+            reminder.getUser(), startOfDay, endOfDay);
 
     MedicineHistory history = todayHistories.stream()
             .filter(h -> h.getReminder().getId().equals(reminderId))
@@ -163,7 +170,7 @@ public MedicineHistory postponeReminder(Long reminderId, Long chatId, int minute
     return historyRepository.save(history);
 }
 
-    @Override
+@Override
 @Transactional
 public void markReminderAsTakenByBot(Long reminderId, Long chatId) {
     Reminder reminder = reminderRepository.findById(reminderId)
@@ -173,8 +180,15 @@ public void markReminderAsTakenByBot(Long reminderId, Long chatId) {
         throw new RuntimeException("Chat ID does not match reminder owner");
     }
 
-    LocalDate today = LocalDate.now(ZoneOffset.UTC);
-    OffsetDateTime startOfDay = today.atStartOfDay().atOffset(ZoneOffset.UTC);
+    // 👇 ДЛЯ КУРСОВЫХ ИСПОЛЬЗУЕМ specificDate
+    LocalDate targetDate;
+    if (reminder.getSpecificDate() != null) {
+        targetDate = reminder.getSpecificDate();
+    } else {
+        targetDate = LocalDate.now(ZoneOffset.UTC);
+    }
+
+    OffsetDateTime startOfDay = targetDate.atStartOfDay().atOffset(ZoneOffset.UTC);
     OffsetDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
 
     List<MedicineHistory> histories = historyRepository.findByUserAndPeriod(
@@ -187,7 +201,7 @@ public void markReminderAsTakenByBot(Long reminderId, Long chatId) {
             .orElse(null);
 
     if (history == null) {
-        OffsetDateTime scheduledTime = today.atTime(reminder.getReminderTime()).atOffset(ZoneOffset.UTC);
+        OffsetDateTime scheduledTime = targetDate.atTime(reminder.getReminderTime()).atOffset(ZoneOffset.UTC);
         history = new MedicineHistory(reminder, scheduledTime);
         history = historyRepository.save(history);
     }
@@ -195,13 +209,14 @@ public void markReminderAsTakenByBot(Long reminderId, Long chatId) {
     history.markAsTaken();
     historyRepository.save(history);
 
+    // Удаляем другие POSTPONED записи для этого напоминания
     for (MedicineHistory h : histories) {
-        if (h.getReminder().getId().equals(reminderId) && h.getStatus() == MedicineStatus.POSTPONED && !h.getId().equals(history.getId())) {
+        if (h.getReminder().getId().equals(reminderId) &&
+            h.getStatus() == MedicineStatus.POSTPONED &&
+            !h.getId().equals(history.getId())) {
             historyRepository.delete(h);
         }
     }
-
-    System.out.println("✅ Напоминание " + reminderId + " отмечено как принято через бота");
 }
 
     @Override
@@ -215,39 +230,44 @@ public void markReminderAsTakenByBot(Long reminderId, Long chatId) {
         return historyRepository.save(history);
     }
 
-    @Override
-    @Transactional
-    public void markReminderAsSkippedByBot(Long reminderId, Long chatId) {
-        Reminder reminder = reminderRepository.findById(reminderId)
-                .orElseThrow(() -> new RuntimeException("Reminder not found: " + reminderId));
+@Override
+@Transactional
+public void markReminderAsSkippedByBot(Long reminderId, Long chatId) {
+    Reminder reminder = reminderRepository.findById(reminderId)
+            .orElseThrow(() -> new RuntimeException("Reminder not found: " + reminderId));
 
-        if (!reminder.getUser().getTelegramChatId().equals(chatId)) {
-            throw new RuntimeException("Chat ID does not match reminder owner");
-        }
-
-        OffsetDateTime startOfDay = OffsetDateTime.now(ZoneOffset.UTC).withHour(0).withMinute(0).withSecond(0).withNano(0);
-        OffsetDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
-
-        List<MedicineHistory> histories = historyRepository.findByUserAndPeriod(
-                reminder.getUser(), startOfDay, endOfDay);
-
-        MedicineHistory history = histories.stream()
-                .filter(h -> h.getReminder().getId().equals(reminderId))
-                .findFirst()
-                .orElse(null);
-
-        if (history == null) {
-            OffsetDateTime scheduledTime = startOfDay.withHour(reminder.getReminderTime().getHour())
-                    .withMinute(reminder.getReminderTime().getMinute());
-            history = new MedicineHistory(reminder, scheduledTime);
-            history = historyRepository.save(history);
-        }
-
-        history.markAsSkipped();
-        historyRepository.save(history);
-
-        System.out.println("✅ Напоминание " + reminderId + " отмечено как пропущено через бота");
+    if (!reminder.getUser().getTelegramChatId().equals(chatId)) {
+        throw new RuntimeException("Chat ID does not match reminder owner");
     }
+
+    // 👇 ДЛЯ КУРСОВЫХ ИСПОЛЬЗУЕМ specificDate
+    LocalDate targetDate;
+    if (reminder.getSpecificDate() != null) {
+        targetDate = reminder.getSpecificDate();
+    } else {
+        targetDate = LocalDate.now(ZoneOffset.UTC);
+    }
+
+    OffsetDateTime startOfDay = targetDate.atStartOfDay().atOffset(ZoneOffset.UTC);
+    OffsetDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
+
+    List<MedicineHistory> histories = historyRepository.findByUserAndPeriod(
+            reminder.getUser(), startOfDay, endOfDay);
+
+    MedicineHistory history = histories.stream()
+            .filter(h -> h.getReminder().getId().equals(reminderId))
+            .findFirst()
+            .orElse(null);
+
+    if (history == null) {
+        OffsetDateTime scheduledTime = targetDate.atTime(reminder.getReminderTime()).atOffset(ZoneOffset.UTC);
+        history = new MedicineHistory(reminder, scheduledTime);
+        history = historyRepository.save(history);
+    }
+
+    history.markAsSkipped();
+    historyRepository.save(history);
+}
 
 @Override
 @Transactional

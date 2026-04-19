@@ -190,17 +190,30 @@ public Reminder createCourseReminder(Long userId, Long medicineId, LocalTime rem
     }
 
     @Override
-    public boolean shouldNotifyNow(Reminder reminder) {
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        LocalTime rt = reminder.getReminderTime();
-        LocalTime reminderTimeUTC = rt.minusHours(7);
+public boolean shouldNotifyNow(Reminder reminder) {
+    OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+    LocalTime rt = reminder.getReminderTime();
+    LocalTime reminderTimeUTC = rt.minusHours(7);
 
-        boolean timeMatches = now.getHour() == reminderTimeUTC.getHour() && now.getMinute() == reminderTimeUTC.getMinute();
-        boolean dayMatches = checkDayOfWeek(reminder, now);
+    boolean timeMatches = now.getHour() == reminderTimeUTC.getHour()
+                       && now.getMinute() == reminderTimeUTC.getMinute();
 
-        logger.debug("Checking reminder {} now={} reminderLocal={} reminderUTC={} tm={} dm={}", reminder.getId(), now, rt, reminderTimeUTC, timeMatches, dayMatches);
-        return timeMatches && dayMatches;
+    // 👇 ПРОВЕРКА ДЛЯ КУРСОВЫХ НАПОМИНАНИЙ
+    if (reminder.getSpecificDate() != null) {
+        // Курсовое напоминание - проверяем конкретную дату
+        LocalDate today = now.toLocalDate();
+        boolean dateMatches = reminder.getSpecificDate().equals(today);
+
+        logger.debug("Course reminder {}: specificDate={}, today={}, matches={}",
+                    reminder.getId(), reminder.getSpecificDate(), today, dateMatches);
+
+        return timeMatches && dateMatches;
     }
+
+    // Обычное напоминание
+    boolean dayMatches = checkDayOfWeek(reminder, now);
+    return timeMatches && dayMatches;
+}
 
 private boolean checkDayOfWeek(Reminder reminder, OffsetDateTime now) {
     String daysOfWeek = reminder.getDaysOfWeek();
@@ -209,10 +222,7 @@ private boolean checkDayOfWeek(Reminder reminder, OffsetDateTime now) {
         return true;
     }
 
-    if (daysOfWeek.matches("^\\d{4}-\\d{2}-\\d{2}$")) {
-        return now.toLocalDate().toString().equals(daysOfWeek);
-    }
-
+    // Убираем проверку на формат даты - для этого есть specificDate
     int currentDay = now.getDayOfWeek().getValue();
     return daysOfWeek.contains(String.valueOf(currentDay));
 }

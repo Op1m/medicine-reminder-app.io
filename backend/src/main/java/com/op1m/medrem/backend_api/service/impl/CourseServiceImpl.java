@@ -3,8 +3,10 @@ package com.op1m.medrem.backend_api.service.impl;
 import com.op1m.medrem.backend_api.entity.*;
 import com.op1m.medrem.backend_api.entity.enums.CourseScheduleType;
 import com.op1m.medrem.backend_api.entity.enums.MealMode;
+import com.op1m.medrem.backend_api.entity.enums.MedicineStatus;
 import com.op1m.medrem.backend_api.repository.CourseMedicationRepository;
 import com.op1m.medrem.backend_api.repository.CourseRepository;
+import com.op1m.medrem.backend_api.repository.MedicineHistoryRepository;
 import com.op1m.medrem.backend_api.repository.ReminderRepository;
 import com.op1m.medrem.backend_api.service.CourseService;
 import com.op1m.medrem.backend_api.service.MedicineService;
@@ -44,6 +46,9 @@ public class CourseServiceImpl implements CourseService {
 
     @Autowired
     private ReminderRepository reminderRepository;
+
+    @Autowired
+private MedicineHistoryRepository medicineHistoryRepository;
 
     @Override
     @Transactional
@@ -291,9 +296,15 @@ private int generateRemindersInternal(Course course, boolean futureOnly) {
                             );
 
                             if (reminder != null) {
-                                created++;
-                                createdSuccessfully++;
-                                existingReminders.add(reminder);
+OffsetDateTime scheduledDateTime = currentDate.atTime(medication.getTimeOfDay())
+                .atOffset(ZoneOffset.UTC);
+        MedicineHistory history = new MedicineHistory(reminder, scheduledDateTime);
+        history.setStatus(MedicineStatus.PENDING);
+        medicineHistoryRepository.save(history);  // ← нужно добавить @Autowired MedicineHistoryRepository
+
+        created++;
+        createdSuccessfully++;
+        existingReminders.add(reminder);
                                 System.out.println("✅ Reminder created successfully with ID: " + reminder.getId());
                             } else {
                                 System.out.println("❌ Reminder creation returned null for date: " + currentDate);
