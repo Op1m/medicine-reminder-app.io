@@ -35,6 +35,10 @@ public class Reminder {
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+@JoinColumn(name = "course_medication_id")
+private CourseMedication courseMedication;
+
     public Reminder() {
         this.createdAt = OffsetDateTime.now(ZoneOffset.UTC);
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
