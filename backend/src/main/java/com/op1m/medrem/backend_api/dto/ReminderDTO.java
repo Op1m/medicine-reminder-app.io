@@ -1,6 +1,6 @@
 package com.op1m.medrem.backend_api.dto;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 
@@ -11,18 +11,17 @@ public class ReminderDTO {
     private LocalTime reminderTime;
     private Boolean isActive;
     private String daysOfWeek;
-
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ssXXX")
     private OffsetDateTime createdAt;
-
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ssXXX")
     private OffsetDateTime updatedAt;
 
-    public ReminderDTO() {}
+    // 👇 НОВЫЕ ПОЛЯ ДЛЯ КУРСОВЫХ НАПОМИНАНИЙ
+    private LocalDate specificDate;
+    private Long courseMedicationId;
+    private CourseMedicationDTO courseMedication;
 
+    // Конструктор для обычных напоминаний
     public ReminderDTO(Long id, UserDTO user, MedicineDTO medicine, LocalTime reminderTime,
-                       Boolean isActive, String daysOfWeek,
-                       OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+                       Boolean isActive, String daysOfWeek, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
         this.id = id;
         this.user = user;
         this.medicine = medicine;
@@ -33,6 +32,10 @@ public class ReminderDTO {
         this.updatedAt = updatedAt;
     }
 
+    // Пустой конструктор
+    public ReminderDTO() {}
+
+    // Геттеры и сеттеры
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -56,4 +59,14 @@ public class ReminderDTO {
 
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    // 👇 ГЕТТЕРЫ И СЕТТЕРЫ ДЛЯ НОВЫХ ПОЛЕЙ
+    public LocalDate getSpecificDate() { return specificDate; }
+    public void setSpecificDate(LocalDate specificDate) { this.specificDate = specificDate; }
+
+    public Long getCourseMedicationId() { return courseMedicationId; }
+    public void setCourseMedicationId(Long courseMedicationId) { this.courseMedicationId = courseMedicationId; }
+
+    public CourseMedicationDTO getCourseMedication() { return courseMedication; }
+    public void setCourseMedication(CourseMedicationDTO courseMedication) { this.courseMedication = courseMedication; }
 }

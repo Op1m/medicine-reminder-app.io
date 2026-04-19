@@ -1,10 +1,6 @@
 package com.op1m.medrem.backend_api.dto;
 
-import com.op1m.medrem.backend_api.entity.MedicineHistory;
-import com.op1m.medrem.backend_api.entity.User;
-import com.op1m.medrem.backend_api.entity.Medicine;
-import com.op1m.medrem.backend_api.entity.Reminder;
-import com.op1m.medrem.backend_api.entity.Category;
+import com.op1m.medrem.backend_api.entity.*;
 import org.springframework.stereotype.Component;
 
 import java.util.HashSet;
@@ -49,35 +45,45 @@ public class DTOMapper {
     public static ReminderDTO toReminderDTO(Reminder reminder) {
         if (reminder == null) return null;
 
-        MedicineDTO medicineDTO = null;
-        UserDTO userDTO = null;
+        ReminderDTO dto = new ReminderDTO();
+        dto.setId(reminder.getId());
+        dto.setUser(toUserDTO(reminder.getUser()));
+        dto.setMedicine(toMedicineDTO(reminder.getMedicine()));
+        dto.setReminderTime(reminder.getReminderTime());
+        dto.setIsActive(reminder.getIsActive());
+        dto.setDaysOfWeek(reminder.getDaysOfWeek());
+        dto.setCreatedAt(reminder.getCreatedAt());
+        dto.setUpdatedAt(reminder.getUpdatedAt());
 
-        try {
-            if (reminder.getMedicine() != null) {
-                medicineDTO = toMedicineDTO(reminder.getMedicine());
-            }
-        } catch (Exception e) {
-            medicineDTO = null;
+        // 👇 ДОБАВЛЯЕМ КУРСОВЫЕ ПОЛЯ
+        dto.setSpecificDate(reminder.getSpecificDate());
+
+        if (reminder.getCourseMedication() != null) {
+            dto.setCourseMedicationId(reminder.getCourseMedication().getId());
+            dto.setCourseMedication(toCourseMedicationDTO(reminder.getCourseMedication()));
         }
 
-        try {
-            if (reminder.getUser() != null) {
-                userDTO = toUserDTO(reminder.getUser());
-            }
-        } catch (Exception e) {
-            userDTO = null;
-        }
+        return dto;
+    }
 
-        return new ReminderDTO(
-                reminder.getId(),
-                userDTO,
-                medicineDTO,
-                reminder.getReminderTime(),
-                reminder.getIsActive(),
-                reminder.getDaysOfWeek(),
-                reminder.getCreatedAt(),
-                reminder.getUpdatedAt()
-        );
+    public static CourseMedicationDTO toCourseMedicationDTO(CourseMedication courseMedication) {
+        if (courseMedication == null) return null;
+
+        CourseMedicationDTO dto = new CourseMedicationDTO();
+        dto.setId(courseMedication.getId());
+        dto.setCourseId(courseMedication.getCourse() != null ? courseMedication.getCourse().getId() : null);
+        dto.setMedicineName(courseMedication.getMedicineName());
+        dto.setDosage(courseMedication.getDosage());
+        dto.setDescription(courseMedication.getDescription());
+        dto.setInstructions(courseMedication.getInstructions());
+        dto.setMealMode(courseMedication.getMealMode() != null ? courseMedication.getMealMode().name() : null);
+        dto.setTimeOfDay(courseMedication.getTimeOfDay());
+        dto.setScheduleType(courseMedication.getScheduleType() != null ? courseMedication.getScheduleType().name() : null);
+        dto.setIntervalDays(courseMedication.getIntervalDays());
+        dto.setGeneratedMedicineId(courseMedication.getGeneratedMedicineId());
+        dto.setIsActive(courseMedication.getActive());
+
+        return dto;
     }
 
     public static MedicineHistoryDTO toMedicineHistoryDTO(MedicineHistory history) {
