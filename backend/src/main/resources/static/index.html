@@ -3949,9 +3949,24 @@ async function updateCourseMedication(courseId, medicationId, medication) {
 }
 
 async function deleteCourseMedication(courseId, medicationId) {
-    return await apiFetch(`/courses/${courseId}/medications/${medicationId}`, {
-        method: 'DELETE'
-    });
+    try {
+        // Удаляем на бэкенде
+        await apiFetch(`/courses/${courseId}/medications/${medicationId}`, {
+            method: 'DELETE'
+        });
+
+        // Удаляем элемент из DOM курса
+        const medElement = document.querySelector(`#course-${courseId}-medication-${medicationId}`);
+        if (medElement) medElement.remove();
+
+        // Обновляем внутренний массив курса, если есть
+        const course = currentCourses.find(c => c.id === courseId);
+        if (course) {
+            course.medications = course.medications.filter(m => m.id !== medicationId);
+        }
+    } catch (e) {
+        alert('Ошибка удаления препарата из курса: ' + e.message);
+    }
 }
 
 async function regenerateRemindersForCourse(courseId) {
@@ -4235,12 +4250,28 @@ async function optimisticDeleteMedicine(medicineId) {
     currentMedicines = currentMedicines.filter(m => m.id != medicineId);
     renderMedicinesListOptimistic(currentMedicines);
 
+    // Удаляем препарат из всех курсов на UI
+    document.querySelectorAll(`[id$='-medication-${medicineId}']`).forEach(el => el.remove());
+
+    // Удаляем из массивов курсов
+    currentCourses.forEach(course => {
+        course.medications = course.medications.filter(m => m.id !== medicineId);
+    });
+
     try {
         await apiFetch(`/medicines/${medicineId}`, { method: 'DELETE' });
     } catch (e) {
         // Откат при ошибке
         currentMedicines.push(medicine);
         renderMedicinesListOptimistic(currentMedicines);
+
+        // Восстанавливаем препарат в курсах
+        currentCourses.forEach(course => {
+            if (!course.medications.find(m => m.id === medicineId)) {
+                course.medications.push(medicine);
+            }
+        });
+
         alert('Ошибка удаления: ' + e.message);
     }
 }
