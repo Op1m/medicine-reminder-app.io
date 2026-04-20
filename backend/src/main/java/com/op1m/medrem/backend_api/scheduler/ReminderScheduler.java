@@ -46,7 +46,7 @@ public class ReminderScheduler {
             }
 
             LocalTime reminderTime = reminder.getReminderTime().withSecond(0).withNano(0);
-            if (!reminderTime.equals(currentTime)) {
+            if (reminderTime.isAfter(currentTime) || reminderTime.isBefore(currentTime.minusMinutes(1))) {
                 continue;
             }
 
@@ -77,11 +77,8 @@ public class ReminderScheduler {
                     .anyMatch(h -> h.getReminder().getId().equals(reminder.getId())
                             && h.getScheduledTime() != null
                             && h.getScheduledTime().toLocalTime().withSecond(0).withNano(0).equals(currentTime)
-                            && (h.getStatus() == MedicineStatus.PENDING
-                            || h.getStatus() == MedicineStatus.POSTPONED
-                            || h.getStatus() == MedicineStatus.TAKEN
-                            || h.getStatus() == MedicineStatus.SKIPPED
-                            || h.getStatus() == MedicineStatus.MISSED));
+                            && ( || h.getStatus() == MedicineStatus.TAKEN
+                            || h.getStatus() == MedicineStatus.SKIPPED));
 
             if (alreadyExists) {
                 continue;
