@@ -38,7 +38,6 @@ public class ReminderServiceImpl implements ReminderService {
     private final UserService userService;
     private final MedicineService medicineService;
     private final MedicineHistoryRepository medicineHistoryRepository;
-    private final MedicineHistoryRepository medicineHistoryRepository;
 
     @Autowired
     public ReminderServiceImpl(ReminderRepository reminderRepository,
@@ -223,7 +222,6 @@ private boolean checkDayOfWeek(Reminder reminder, OffsetDateTime now) {
         return true;
     }
 
-    // Убираем проверку на формат даты - для этого есть specificDate
     int currentDay = now.getDayOfWeek().getValue();
     return daysOfWeek.contains(String.valueOf(currentDay));
 }
