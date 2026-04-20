@@ -58,7 +58,6 @@ public class MedicineHistoryServiceImpl implements MedicineHistoryService {
             throw new RuntimeException("Chat ID does not match reminder owner");
         }
 
-        // Берём историю именно для этого reminder и specificDate
         List<MedicineHistory> histories = historyRepository.findByReminderUserOrderByScheduledTimeDesc(reminder.getUser());
 
         MedicineHistory history = histories.stream()
@@ -69,7 +68,6 @@ public class MedicineHistoryServiceImpl implements MedicineHistoryService {
                 .max(Comparator.comparing(MedicineHistory::getScheduledTime))
                 .orElse(null);
 
-        // базовое время берем из оригинального reminder
         OffsetDateTime baseTime = reminder.getSpecificDate() != null && reminder.getReminderTime() != null
                 ? reminder.getSpecificDate().atTime(reminder.getReminderTime()).atOffset(ZoneOffset.UTC)
                 : OffsetDateTime.now(ZoneOffset.UTC);
@@ -126,6 +124,13 @@ public class MedicineHistoryServiceImpl implements MedicineHistoryService {
     }
 
     @Override
+    public List<MedicineHistory> getUserMedicineHistory(Long userId) {
+        User user = userService.findById(userId);
+        if (user == null) throw new RuntimeException("User not found");
+        return historyRepository.findByReminderUserOrderByScheduledTimeDesc(user);
+    }
+
+    @Override
     @Transactional
     public void checkPostponedReminders() {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
@@ -140,7 +145,6 @@ public class MedicineHistoryServiceImpl implements MedicineHistoryService {
 
             notificationService.notifyUser(reminder);
 
-            // ✅ не меняем scheduledTime, только статус
             history.setStatus(MedicineStatus.PENDING);
             historyRepository.save(history);
         }
