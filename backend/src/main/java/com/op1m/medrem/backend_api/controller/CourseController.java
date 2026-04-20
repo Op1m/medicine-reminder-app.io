@@ -154,6 +154,7 @@ public ResponseEntity<CourseMedication> updateMedication(
     }
 
     public static class CreateCourseMedicationRequest {
+        private Long medicineId;
         private String medicineName;
         private String dosage;
         private String description;

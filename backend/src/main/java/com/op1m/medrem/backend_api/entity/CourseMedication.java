@@ -41,6 +41,9 @@ public class CourseMedication {
     @Column(name = "time_of_day", nullable = false)
     private LocalTime timeOfDay;
 
+    @Transient
+    private Long medicineId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "schedule_type", nullable = false)
     private CourseScheduleType scheduleType = CourseScheduleType.EVERY_DAY;
