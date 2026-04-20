@@ -77,7 +77,7 @@ public class ReminderScheduler {
                     .anyMatch(h -> h.getReminder().getId().equals(reminder.getId())
                             && h.getScheduledTime() != null
                             && h.getScheduledTime().toLocalTime().withSecond(0).withNano(0).equals(currentTime)
-                            && ( || h.getStatus() == MedicineStatus.TAKEN
+                            && ( h.getStatus() == MedicineStatus.TAKEN
                             || h.getStatus() == MedicineStatus.SKIPPED));
 
             if (alreadyExists) {
