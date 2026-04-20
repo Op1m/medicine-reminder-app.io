@@ -49,6 +49,84 @@ public class MedicineHistoryServiceImpl implements MedicineHistoryService {
 
     @Override
     @Transactional
+    public MedicineHistory markAsTaken(Long historyId, String notes) {
+        MedicineHistory history = historyRepository.findById(historyId)
+                .orElseThrow(() -> new RuntimeException("History not found: " + historyId));
+
+        history.markAsTaken();
+        if (notes != null) {
+            history.setNotes(notes);
+        }
+
+        return historyRepository.save(history);
+    }
+
+    @Override
+    @Transactional
+    public MedicineHistory markAsSkipped(Long historyId) {
+        MedicineHistory history = historyRepository.findById(historyId)
+                .orElseThrow(() -> new RuntimeException("History not found: " + historyId));
+
+        history.markAsSkipped();
+        return historyRepository.save(history);
+    }
+
+    @Override
+    public List<MedicineHistory> getUserMedicineHistory(Long userId) {
+        User user = userService.findById(userId);
+        if (user == null) throw new RuntimeException("User not found");
+        return historyRepository.findByReminderUserOrderByScheduledTimeDesc(user);
+    }
+
+    @Override
+    public List<MedicineHistory> getMedicineHistoryByStatus(Long userId, MedicineStatus status) {
+        if (userId == null) return historyRepository.findByStatus(status);
+        User user = userService.findById(userId);
+        return historyRepository.findByReminderUserAndStatusOrderByScheduledTimeDesc(user, status);
+    }
+
+    @Override
+    public List<MedicineHistory> getHistoryByPeriod(Long userId, OffsetDateTime start, OffsetDateTime end) {
+        User user = userService.findById(userId);
+        return historyRepository.findByUserAndPeriod(user, start, end);
+    }
+
+    @Override
+    @Transactional
+    public void markReminderAsTakenByBot(Long reminderId, Long chatId) {
+        Reminder reminder = reminderRepository.findById(reminderId).orElseThrow();
+
+        List<MedicineHistory> histories = historyRepository.findByReminderUserOrderByScheduledTimeDesc(reminder.getUser());
+
+        MedicineHistory history = histories.stream()
+                .filter(h -> h.getReminder().getId().equals(reminderId))
+                .filter(h -> h.getStatus() == MedicineStatus.PENDING || h.getStatus() == MedicineStatus.POSTPONED)
+                .max(Comparator.comparing(MedicineHistory::getScheduledTime))
+                .orElseThrow(() -> new RuntimeException("No active history found for this course"));
+
+        history.markAsTaken();
+        historyRepository.save(history);
+    }
+
+    @Override
+    @Transactional
+    public void markReminderAsSkippedByBot(Long reminderId, Long chatId) {
+        Reminder reminder = reminderRepository.findById(reminderId).orElseThrow();
+
+        List<MedicineHistory> histories = historyRepository.findByReminderUserOrderByScheduledTimeDesc(reminder.getUser());
+
+        MedicineHistory history = histories.stream()
+                .filter(h -> h.getReminder().getId().equals(reminderId))
+                .filter(h -> h.getStatus() == MedicineStatus.PENDING || h.getStatus() == MedicineStatus.POSTPONED)
+                .max(Comparator.comparing(MedicineHistory::getScheduledTime))
+                .orElseThrow(() -> new RuntimeException("No active history found for this course"));
+
+        history.markAsSkipped();
+        historyRepository.save(history);
+    }
+
+    @Override
+    @Transactional
     public MedicineHistory postponeReminder(Long reminderId, Long chatId, int minutes) {
         Reminder reminder = reminderRepository.findById(reminderId)
                 .orElseThrow(() -> new RuntimeException("Reminder not found: " + reminderId));
@@ -62,8 +140,6 @@ public class MedicineHistoryServiceImpl implements MedicineHistoryService {
 
         MedicineHistory history = histories.stream()
                 .filter(h -> h.getReminder().getId().equals(reminderId))
-                .filter(h -> h.getReminder().getSpecificDate() != null
-                        && h.getReminder().getSpecificDate().equals(reminder.getSpecificDate()))
                 .filter(h -> h.getStatus() == MedicineStatus.PENDING || h.getStatus() == MedicineStatus.POSTPONED)
                 .max(Comparator.comparing(MedicineHistory::getScheduledTime))
                 .orElse(null);
@@ -87,51 +163,6 @@ public class MedicineHistoryServiceImpl implements MedicineHistoryService {
 
     @Override
     @Transactional
-    public void markReminderAsTakenByBot(Long reminderId, Long chatId) {
-        Reminder reminder = reminderRepository.findById(reminderId).orElseThrow();
-
-        List<MedicineHistory> histories = historyRepository.findByReminderUserOrderByScheduledTimeDesc(reminder.getUser());
-
-        MedicineHistory history = histories.stream()
-                .filter(h -> h.getReminder().getId().equals(reminderId))
-                .filter(h -> h.getReminder().getSpecificDate() != null
-                        && h.getReminder().getSpecificDate().equals(reminder.getSpecificDate()))
-                .filter(h -> h.getStatus() == MedicineStatus.PENDING || h.getStatus() == MedicineStatus.POSTPONED)
-                .max(Comparator.comparing(MedicineHistory::getScheduledTime))
-                .orElseThrow(() -> new RuntimeException("No active history found for this course"));
-
-        history.markAsTaken();
-        historyRepository.save(history);
-    }
-
-    @Override
-    @Transactional
-    public void markReminderAsSkippedByBot(Long reminderId, Long chatId) {
-        Reminder reminder = reminderRepository.findById(reminderId).orElseThrow();
-
-        List<MedicineHistory> histories = historyRepository.findByReminderUserOrderByScheduledTimeDesc(reminder.getUser());
-
-        MedicineHistory history = histories.stream()
-                .filter(h -> h.getReminder().getId().equals(reminderId))
-                .filter(h -> h.getReminder().getSpecificDate() != null
-                        && h.getReminder().getSpecificDate().equals(reminder.getSpecificDate()))
-                .filter(h -> h.getStatus() == MedicineStatus.PENDING || h.getStatus() == MedicineStatus.POSTPONED)
-                .max(Comparator.comparing(MedicineHistory::getScheduledTime))
-                .orElseThrow(() -> new RuntimeException("No active history found for this course"));
-
-        history.markAsSkipped();
-        historyRepository.save(history);
-    }
-
-    @Override
-    public List<MedicineHistory> getUserMedicineHistory(Long userId) {
-        User user = userService.findById(userId);
-        if (user == null) throw new RuntimeException("User not found");
-        return historyRepository.findByReminderUserOrderByScheduledTimeDesc(user);
-    }
-
-    @Override
-    @Transactional
     public void checkPostponedReminders() {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
 
@@ -144,7 +175,6 @@ public class MedicineHistoryServiceImpl implements MedicineHistoryService {
             if (reminder == null) continue;
 
             notificationService.notifyUser(reminder);
-
             history.setStatus(MedicineStatus.PENDING);
             historyRepository.save(history);
         }
@@ -165,26 +195,13 @@ public class MedicineHistoryServiceImpl implements MedicineHistoryService {
     }
 
     @Override
-    public List<MedicineHistory> getHistoryByPeriod(Long userId, OffsetDateTime start, OffsetDateTime end) {
-        User user = userService.findById(userId);
-        return historyRepository.findByUserAndPeriod(user, start, end);
-    }
-
-    @Override
-    public List<MedicineHistory> getMedicineHistoryByStatus(Long userId, MedicineStatus status) {
-        if (userId == null) return historyRepository.findByStatus(status);
-        User user = userService.findById(userId);
-        return historyRepository.findByReminderUserAndStatusOrderByScheduledTimeDesc(user, status);
+    public MedicineHistory findById(Long historyId) {
+        return historyRepository.findById(historyId)
+                .orElseThrow(() -> new RuntimeException("History not found: " + historyId));
     }
 
     @Override
     public MedicineHistory save(MedicineHistory history) {
         return historyRepository.save(history);
-    }
-
-    @Override
-    public MedicineHistory findById(Long historyId) {
-        return historyRepository.findById(historyId)
-                .orElseThrow(() -> new RuntimeException("History not found: " + historyId));
     }
 }
