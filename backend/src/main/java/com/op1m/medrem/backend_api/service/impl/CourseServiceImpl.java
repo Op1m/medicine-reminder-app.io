@@ -88,15 +88,6 @@ private MedicineHistoryRepository medicineHistoryRepository;
     @Override
     @Transactional
     public CourseMedication addMedicationToCourse(Long courseId, CourseMedication medication) {
-        if (medication.getMedicineId() != null) {
-            Medicine medicine = medicineService.findById(medication.getMedicineId());
-            if (medicine != null) {
-                medication.setMedicineName(medicine.getName());
-                medication.setDosage(medicine.getDosage());
-                medication.setInstructions(medicine.getInstructions());
-                medication.setGeneratedMedicineId(medicine.getId());
-            }
-        }
         Course course = findById(courseId);
         if (medication == null) {
             throw new RuntimeException("Medication payload is required");
