@@ -1,211 +1,146 @@
 package com.op1m.medrem.backend_api.controller;
 
-import com.op1m.medrem.backend_api.dto.MedicineHistoryDTO;
+import com.op1m.medrem.backend_api.entity.Medicine;
+import com.op1m.medrem.backend_api.service.MedicineService;
+import com.op1m.medrem.backend_api.dto.MedicineDTO;
 import com.op1m.medrem.backend_api.dto.DTOMapper;
-import com.op1m.medrem.backend_api.entity.MedicineHistory;
-import com.op1m.medrem.backend_api.entity.User;
-import com.op1m.medrem.backend_api.entity.enums.MedicineStatus;
-import com.op1m.medrem.backend_api.service.MedicineHistoryService;
-import com.op1m.medrem.backend_api.service.UserService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.format.annotation.DateTimeFormat;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeParseException;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/medicine-history")
-public class MedicineHistoryController {
-    @Autowired
-    private MedicineHistoryService medicineHistoryService;
+@RequestMapping("/api/medicines")
+public class MedicineController {
 
-    @Autowired
-    private UserService userService;
+    private final MedicineService medicineService;
 
-    @GetMapping("/user/{userId}")
-    public ResponseEntity<List<MedicineHistoryDTO>> getUserHistory(@PathVariable Long userId) {
-        try {
-            List<MedicineHistory> history = medicineHistoryService.getUserMedicineHistory(userId);
-            List<MedicineHistoryDTO> historyDTO = history.stream()
-                    .map(DTOMapper::toMedicineHistoryDTO)
-                    .collect(Collectors.toList());
-            return new ResponseEntity<>(historyDTO, HttpStatus.OK);
-        } catch (RuntimeException e) {
+    public MedicineController(MedicineService medicineService) {
+        this.medicineService = medicineService;
+    }
+
+    @PostMapping
+    public ResponseEntity<MedicineDTO> createMedicine(@Valid @RequestBody MedicineCreateRequest request) {
+        Medicine medicine = medicineService.createMedicine(
+                request.getName(),
+                request.getDosage(),
+                request.getDescription(),
+                request.getInstructions()  // ← ТЕПЕРЬ ПЕРЕДАЁТСЯ
+        );
+
+        MedicineDTO medicineDTO = DTOMapper.toMedicineDTO(medicine);
+        return new ResponseEntity<>(medicineDTO, HttpStatus.CREATED);
+    }
+
+    @GetMapping
+    public List<MedicineDTO> getAllActiveMedicines() {
+        return medicineService.getAllActiveMedicines().stream()
+                .map(DTOMapper::toMedicineDTO)
+                .collect(Collectors.toList());
+    }
+
+    @GetMapping("/search")
+    public List<MedicineDTO> searchMedicines(@RequestParam String name) {
+        return medicineService.searchMedicines(name).stream()
+                .map(DTOMapper::toMedicineDTO)
+                .collect(Collectors.toList());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<MedicineDTO> getMedicineById(@PathVariable Long id) {
+        Medicine medicine = medicineService.findById(id);
+        if (medicine == null) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
+        MedicineDTO medicineDTO = DTOMapper.toMedicineDTO(medicine);
+        return new ResponseEntity<>(medicineDTO, HttpStatus.OK);
     }
 
-    @GetMapping("/user/{userId}/status/{status}")
-    public ResponseEntity<List<MedicineHistoryDTO>> getUserHistoryByStatus(@PathVariable Long userId, @PathVariable MedicineStatus status) {
-        try {
-            List<MedicineHistory> history = medicineHistoryService.getMedicineHistoryByStatus(userId, status);
-            List<MedicineHistoryDTO> historyDTO = history.stream()
-                    .map(DTOMapper::toMedicineHistoryDTO)
-                    .collect(Collectors.toList());
-            return new ResponseEntity<>(historyDTO, HttpStatus.OK);
-        } catch (RuntimeException e) {
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deactivateMedicine(@PathVariable Long id) {
+        Medicine medicine = medicineService.deactivateMedicine(id);
+        if (medicine == null) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
+        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
 
-    @GetMapping("/user/{userId}/period")
-    public ResponseEntity<List<MedicineHistoryDTO>> getHistoryByPeriod(
-            @PathVariable Long userId,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime start,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime end) {
-        try {
-            List<MedicineHistory> history = medicineHistoryService.getHistoryByPeriod(userId, start, end);
-            List<MedicineHistoryDTO> historyDTO = history.stream()
-                    .map(DTOMapper::toMedicineHistoryDTO)
-                    .collect(Collectors.toList());
-            return new ResponseEntity<>(historyDTO, HttpStatus.OK);
-        } catch (IllegalArgumentException e) {
-            e.printStackTrace();
-            return ResponseEntity.badRequest().build();
-        } catch (RuntimeException e) {
-            e.printStackTrace();
+    @PutMapping("/{id}")
+    public ResponseEntity<MedicineDTO> updateMedicine(@PathVariable Long id,
+                                                      @Valid @RequestBody MedicineUpdateRequest request) {
+        Medicine updatedMedicine = medicineService.updateMedicine(
+                id,
+                request.getName(),
+                request.getDosage(),
+                request.getDescription(),
+                request.getInstructions()
+        );
+        if (updatedMedicine == null) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
+        MedicineDTO medicineDTO = DTOMapper.toMedicineDTO(updatedMedicine);
+        return new ResponseEntity<>(medicineDTO, HttpStatus.OK);
     }
 
-    @PatchMapping("/{historyId}/mark-taken")
-    public ResponseEntity<MedicineHistoryDTO> markAsTaken(@PathVariable Long historyId, @RequestBody(required = false) MarkTakenRequest request) {
-        try {
-            String notes = request != null ? request.getNotes() : null;
-            MedicineHistory history = medicineHistoryService.markAsTaken(historyId, notes);
-            MedicineHistoryDTO historyDTO = DTOMapper.toMedicineHistoryDTO(history);
-            return new ResponseEntity<>(historyDTO, HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        }
+    // ✅ ДОБАВЛЕНО ПОЛЕ instructions
+    public static class MedicineCreateRequest {
+        @NotBlank(message = "Название лекарства обязательно")
+        @Size(min = 2, max = 100, message = "Название должно быть от 2 до 100 символов")
+        private String name;
+
+        @NotBlank(message = "Дозировка обязательна")
+        @Size(max = 50, message = "Дозировка не более 50 символов")
+        private String dosage;
+
+        @Size(max = 500, message = "Описание не более 500 символов")
+        private String description;
+
+        @Size(max = 500, message = "Инструкции не более 500 символов")
+        private String instructions;  // ← ДОБАВЛЕНО
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+
+        public String getDosage() { return dosage; }
+        public void setDosage(String dosage) { this.dosage = dosage; }
+
+        public String getDescription() { return description; }
+        public void setDescription(String description) { this.description = description; }
+
+        public String getInstructions() { return instructions; }
+        public void setInstructions(String instructions) { this.instructions = instructions; }
     }
 
+    public static class MedicineUpdateRequest {
+        @NotBlank(message = "Название лекарства обязательно")
+        @Size(min = 2, max = 100, message = "Название должно быть от 2 до 100 символов")
+        private String name;
 
-    @PostMapping("/{historyId}/postpone")
-    public ResponseEntity<MedicineHistoryDTO> postponeHistory(
-            @PathVariable Long historyId,
-            @RequestParam(defaultValue = "10") int minutes) {
-        try {
-            MedicineHistory history = medicineHistoryService.findById(historyId);
-            if (history == null) {
-                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-            }
+        @NotBlank(message = "Дозировка обязательна")
+        @Size(max = 50, message = "Дозировка не более 50 символов")
+        private String dosage;
 
-            OffsetDateTime newScheduledTime = OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(minutes);
+        @Size(max = 500, message = "Описание не более 500 символов")
+        private String description;
 
-            MedicineHistory postponedHistory = new MedicineHistory(history.getReminder(), newScheduledTime);
-            postponedHistory.setStatus(MedicineStatus.POSTPONED);
-            postponedHistory.setNotes("Отложено на " + minutes + " минут");
+        @Size(max = 500, message = "Инструкции не более 500 символов")
+        private String instructions;
 
-            MedicineHistory saved = medicineHistoryService.save(postponedHistory);
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
 
-            MedicineHistoryDTO dto = DTOMapper.toMedicineHistoryDTO(saved);
-            return new ResponseEntity<>(dto, HttpStatus.OK);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
+        public String getDosage() { return dosage; }
+        public void setDosage(String dosage) { this.dosage = dosage; }
 
-@PostMapping("/reminder/{reminderId}/postpone")
-public ResponseEntity<?> postponeReminder(
-        @PathVariable Long reminderId,
-        @RequestParam(defaultValue = "10") int minutes,
-        Authentication authentication) {
-    try {
-        String username = authentication.getName();
-        User user = userService.findByUsername(username);
+        public String getDescription() { return description; }
+        public void setDescription(String description) { this.description = description; }
 
-        MedicineHistory postponed = medicineHistoryService.postponeReminder(
-                reminderId, user.getTelegramChatId(), minutes);
-
-        // ВРЕМЕННЫЙ ОБХОД: возвращаем только нужные поля в Map
-        Map<String, Object> response = new HashMap<>();
-        response.put("id", postponed.getId());
-        response.put("status", postponed.getStatus().toString());
-        response.put("scheduledTime", postponed.getScheduledTime().toString());
-        response.put("notes", postponed.getNotes());
-
-        // Добавляем минимальную информацию о reminder
-        if (postponed.getReminder() != null) {
-            Map<String, Object> reminderMap = new HashMap<>();
-            reminderMap.put("id", postponed.getReminder().getId());
-            response.put("reminder", reminderMap);
-        }
-
-        return ResponseEntity.ok(response);
-    } catch (Exception e) {
-        return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-    }
-}
-
-    @PatchMapping("/{historyId}/mark-skipped")
-    public ResponseEntity<MedicineHistoryDTO> markAsSkipped(@PathVariable Long historyId) {
-        try {
-            MedicineHistory history = medicineHistoryService.markAsSkipped(historyId);
-            MedicineHistoryDTO historyDTO = DTOMapper.toMedicineHistoryDTO(history);
-            return new ResponseEntity<>(historyDTO, HttpStatus.OK);
-        } catch (RuntimeException e) {
-            e.printStackTrace();
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        }
-    }
-
-    @PostMapping("/{historyId}/mark-skipped")
-    public ResponseEntity<MedicineHistoryDTO> markAsSkippedPost(@PathVariable Long historyId) {
-        return markAsSkipped(historyId);
-    }
-
-    @PostMapping("/schedule")
-    public ResponseEntity<?> createScheduleDose(@RequestBody ScheduleDoseRequest request) {
-        try {
-            OffsetDateTime scheduled = null;
-            if (request.getScheduledTime() != null) {
-                try {
-                    scheduled = OffsetDateTime.parse(request.getScheduledTime());
-                } catch (DateTimeParseException ex) {
-                    scheduled = OffsetDateTime.parse(request.getScheduledTime() + "Z");
-                }
-            }
-            MedicineHistory history = medicineHistoryService.createScheduleDose(request.getReminderId(), scheduled);
-            MedicineHistoryDTO dto = DTOMapper.toMedicineHistoryDTO(history);
-            return ResponseEntity.ok(dto);
-        } catch (Exception e) {
-            e.printStackTrace();
-            Map<String, String> err = new HashMap<>();
-            err.put("error", e.getMessage());
-            err.put("trace", e.toString());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(err);
-        }
-    }
-
-    @PostMapping("/check_missed")
-    public ResponseEntity<Void> checkMissedDoses() {
-        medicineHistoryService.checkAndMarkMissedDoses();
-        return new ResponseEntity<>(HttpStatus.OK);
-    }
-
-    public static class MarkTakenRequest {
-        private String notes;
-        public String getNotes() { return notes; }
-        public void setNotes(String notes) { this.notes = notes; }
-    }
-
-    public static class ScheduleDoseRequest {
-        private Long reminderId;
-        private String scheduledTime;
-        public Long getReminderId() { return reminderId; }
-        public void setReminderId(Long reminderId) { this.reminderId = reminderId; }
-        public String getScheduledTime() { return scheduledTime; }
-        public void setScheduledTime(String scheduledTime) { this.scheduledTime = scheduledTime; }
+        public String getInstructions() { return instructions; }
+        public void setInstructions(String instructions) { this.instructions = instructions; }
     }
 }
