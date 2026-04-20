@@ -27,7 +27,8 @@ public class ReminderScheduler {
     @Autowired
     private ReminderRepository reminderRepository;
 
-    @Scheduled(cron = "0 * * * * *")
+    /** Проверка всех обычных PENDING reminders по расписанию */
+    @Scheduled(cron = "0 * * * * *") // каждая минута
     @Transactional
     public void checkDueReminders() {
 
@@ -43,11 +44,11 @@ public class ReminderScheduler {
 
             LocalTime reminderTime = reminder.getReminderTime();
 
-            // ✅ фикс: окно ±60 секунд
+            // окно ±60 секунд
             long diff = Math.abs(reminderTime.toSecondOfDay() - currentTime.toSecondOfDay());
             if (diff > 60) continue;
 
-            // ✅ проверка даты
+            // проверка даты
             if (reminder.getSpecificDate() != null) {
                 if (!today.equals(reminder.getSpecificDate())) continue;
             } else {
@@ -61,7 +62,7 @@ public class ReminderScheduler {
                 }
             }
 
-            // ❗ проверяем только TAKEN / SKIPPED
+            // проверка, был ли уже TAKEN / SKIPPED
             OffsetDateTime start = today.atStartOfDay().atOffset(ZoneOffset.UTC);
             OffsetDateTime end = start.plusDays(1);
 
@@ -76,18 +77,25 @@ public class ReminderScheduler {
 
             if (alreadyDone) continue;
 
-            // ✅ создаём history
+            // создаём историю PENDING
             MedicineHistory history = medicineHistoryService.createScheduleDose(reminder.getId(), now);
 
-            // ✅ отправляем
-            if (history != null) {
-                System.out.println("🚀 SEND reminder " + reminder.getId());
-                notificationService.notifyUser(reminder);
-            }
+            // логируем PENDING
+            System.out.println("[PENDING] Reminder ID: " + reminder.getId() +
+                    ", User ID: " + reminder.getUser().getId() +
+                    ", chatId: " + reminder.getUser().getTelegramChatId() +
+                    ", now: " + now +
+                    ", reminderTime: " + reminderTime +
+                    ", specificDate: " + reminder.getSpecificDate() +
+                    ", historyId: " + history.getId());
+
+            // отправляем
+            notificationService.notifyUser(reminder);
         }
     }
 
-    @Scheduled(cron = "*/30 * * * * *")
+    /** Проверка отложенных reminders (POSTPONED) */
+    @Scheduled(cron = "*/30 * * * * *") // каждые 30 секунд
     @Transactional
     public void checkPostponedReminders() {
 
@@ -98,27 +106,36 @@ public class ReminderScheduler {
 
         for (MedicineHistory history : postponed) {
 
+            Reminder reminder = history.getReminder();
+            if (reminder == null) continue;
+
+            // логируем POSTPONED
+            System.out.println("[POSTPONED] Reminder ID: " + reminder.getId() +
+                    ", User ID: " + reminder.getUser().getId() +
+                    ", chatId: " + reminder.getUser().getTelegramChatId() +
+                    ", now: " + now +
+                    ", scheduledTime: " + history.getScheduledTime() +
+                    ", specificDate: " + reminder.getSpecificDate() +
+                    ", historyId: " + history.getId());
+
             if (history.getScheduledTime() == null) continue;
 
-            // ✅ фикс
             if (!history.getScheduledTime().isAfter(now)) {
 
-                Reminder reminder = history.getReminder();
-                if (reminder == null) continue;
+                System.out.println("[POSTPONED FIRE] Sending reminder ID: " + reminder.getId());
 
-                System.out.println("⏰ POSTPONED FIRE " + reminder.getId());
-
+                // отправляем
                 notificationService.notifyUser(reminder);
 
+                // переводим обратно в PENDING
                 history.setStatus(MedicineStatus.PENDING);
-                history.setScheduledTime(now);
-
                 medicineHistoryService.save(history);
             }
         }
     }
 
-    @Scheduled(cron = "10 * * * * *")
+    /** Проверка пропущенных доз */
+    @Scheduled(cron = "10 * * * * *") // каждая минута +10 секунд
     @Transactional
     public void checkMissedDoses() {
         medicineHistoryService.checkAndMarkMissedDoses();
