@@ -136,34 +136,25 @@ public class MedicineHistoryServiceImpl implements MedicineHistoryService {
             throw new RuntimeException("Chat ID does not match reminder owner");
         }
 
-        // ищем последнюю историю PENDING или POSTPONED
-        List<MedicineHistory> histories = historyRepository.findByReminderUserOrderByScheduledTimeDesc(reminder.getUser());
+        // ✅ Всегда берём текущее время в UTC
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime newTime = now.plusMinutes(minutes);
 
+        // Ищем последнюю активную историю (PENDING или POSTPONED)
+        List<MedicineHistory> histories = historyRepository.findByReminderUserOrderByScheduledTimeDesc(reminder.getUser());
         MedicineHistory history = histories.stream()
                 .filter(h -> h.getReminder().getId().equals(reminderId))
                 .filter(h -> h.getStatus() == MedicineStatus.PENDING || h.getStatus() == MedicineStatus.POSTPONED)
                 .max(Comparator.comparing(MedicineHistory::getScheduledTime))
                 .orElse(null);
 
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-
-        // база для отложки
-        OffsetDateTime baseTime;
-        if (history != null && history.getScheduledTime() != null && history.getScheduledTime().isAfter(now)) {
-            // берем текущее scheduledTime, если оно ещё в будущем
-            baseTime = history.getScheduledTime();
-        } else {
-            // если scheduledTime уже прошло, берем текущее время
-            baseTime = now;
-        }
-
-        OffsetDateTime newTime = baseTime.plusMinutes(minutes);
-
         if (history == null) {
             history = new MedicineHistory(reminder, newTime);
+        } else {
+            // Если есть существующая история, обновляем её время и статус
+            history.setScheduledTime(newTime);
         }
 
-        history.setScheduledTime(newTime);
         history.setStatus(MedicineStatus.POSTPONED);
         history.setNotes("Отложено на " + minutes + " минут");
 

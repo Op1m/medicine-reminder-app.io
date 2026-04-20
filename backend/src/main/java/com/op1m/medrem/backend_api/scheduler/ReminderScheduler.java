@@ -28,10 +28,9 @@ public class ReminderScheduler {
     private ReminderRepository reminderRepository;
 
     /** Проверка всех обычных PENDING reminders по расписанию */
-    @Scheduled(cron = "0 * * * * *") // каждая минута
+    @Scheduled(cron = "0 * * * * *")
     @Transactional
     public void checkDueReminders() {
-
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         LocalDate today = now.toLocalDate();
         LocalTime currentTime = now.toLocalTime();
@@ -39,19 +38,20 @@ public class ReminderScheduler {
         List<Reminder> reminders = reminderRepository.findAllActiveWithUserAndMedicine();
 
         for (Reminder reminder : reminders) {
-
             if (reminder.getReminderTime() == null) continue;
 
             LocalTime reminderTime = reminder.getReminderTime();
 
-            // окно ±60 секунд
+            // Проверяем совпадение времени с учётом 60 секунд
             long diff = Math.abs(reminderTime.toSecondOfDay() - currentTime.toSecondOfDay());
             if (diff > 60) continue;
 
-            // проверка даты
+            // Проверяем, подходит ли сегодняшняя дата
             if (reminder.getSpecificDate() != null) {
+                // Курсовое напоминание
                 if (!today.equals(reminder.getSpecificDate())) continue;
             } else {
+                // Обычное напоминание с днями недели
                 String days = reminder.getDaysOfWeek();
                 if (days != null && !days.equals("everyday")) {
                     int todayNum = today.getDayOfWeek().getValue();
@@ -62,34 +62,38 @@ public class ReminderScheduler {
                 }
             }
 
-            // проверка, был ли уже TAKEN / SKIPPED
-            OffsetDateTime start = today.atStartOfDay().atOffset(ZoneOffset.UTC);
-            OffsetDateTime end = start.plusDays(1);
+            // Проверяем, была ли уже запись за сегодня со статусом TAKEN или SKIPPED
+            OffsetDateTime startOfDay = today.atStartOfDay().atOffset(ZoneOffset.UTC);
+            OffsetDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
 
-            boolean alreadyDone = medicineHistoryService
-                    .getHistoryByPeriod(reminder.getUser().getId(), start, end)
+            boolean alreadyTakenOrSkipped = medicineHistoryService
+                    .getHistoryByPeriod(reminder.getUser().getId(), startOfDay, endOfDay)
                     .stream()
-                    .anyMatch(h ->
-                            h.getReminder().getId().equals(reminder.getId()) &&
-                                    (h.getStatus() == MedicineStatus.TAKEN ||
-                                            h.getStatus() == MedicineStatus.SKIPPED)
-                    );
+                    .anyMatch(h -> h.getReminder().getId().equals(reminder.getId())
+                            && (h.getStatus() == MedicineStatus.TAKEN || h.getStatus() == MedicineStatus.SKIPPED));
 
-            if (alreadyDone) continue;
+            if (alreadyTakenOrSkipped) {
+                System.out.println("[SKIP] Reminder " + reminder.getId() + " already taken or skipped today");
+                continue;
+            }
 
-            // создаём историю PENDING
+            // Проверяем, есть ли уже POSTPONED запись на сегодня (если есть — не создаём новую)
+            boolean alreadyPostponed = medicineHistoryService
+                    .getHistoryByPeriod(reminder.getUser().getId(), startOfDay, endOfDay)
+                    .stream()
+                    .anyMatch(h -> h.getReminder().getId().equals(reminder.getId())
+                            && h.getStatus() == MedicineStatus.POSTPONED);
+
+            if (alreadyPostponed) {
+                System.out.println("[SKIP] Reminder " + reminder.getId() + " already postponed today");
+                continue;
+            }
+
+            // Создаём новую запись PENDING
             MedicineHistory history = medicineHistoryService.createScheduleDose(reminder.getId(), now);
+            System.out.println("[PENDING] Created history " + history.getId() + " for reminder " + reminder.getId());
 
-            // логируем PENDING
-            System.out.println("[PENDING] Reminder ID: " + reminder.getId() +
-                    ", User ID: " + reminder.getUser().getId() +
-                    ", chatId: " + reminder.getUser().getTelegramChatId() +
-                    ", now: " + now +
-                    ", reminderTime: " + reminderTime +
-                    ", specificDate: " + reminder.getSpecificDate() +
-                    ", historyId: " + history.getId());
-
-            // отправляем
+            // Отправляем уведомление
             notificationService.notifyUser(reminder);
         }
     }
