@@ -55,7 +55,7 @@ public class ReminderScheduler {
                 shouldNotify = today.equals(reminder.getSpecificDate());
             } else {
                 String daysOfWeek = reminder.getDaysOfWeek();
-                if ("everyday".equals(daysOfWeek) || daysOfWeek == null) {
+                if (daysOfWeek == null || "everyday".equals(daysOfWeek)) {
                     shouldNotify = true;
                 } else {
                     shouldNotify = Arrays.stream(daysOfWeek.split(","))
@@ -87,10 +87,7 @@ public class ReminderScheduler {
                 continue;
             }
 
-            MedicineHistory history = medicineHistoryService.createScheduleDose(
-                    reminder.getId(),
-                    now
-            );
+            MedicineHistory history = medicineHistoryService.createScheduleDose(reminder.getId(), now);
 
             if (history != null) {
                 notificationService.notifyUser(reminder);

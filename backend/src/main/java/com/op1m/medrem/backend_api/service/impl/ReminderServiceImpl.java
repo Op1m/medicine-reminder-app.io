@@ -38,6 +38,7 @@ public class ReminderServiceImpl implements ReminderService {
     private final UserService userService;
     private final MedicineService medicineService;
     private final MedicineHistoryRepository medicineHistoryRepository;
+    private final MedicineHistoryRepository medicineHistoryRepository;
 
     @Autowired
     public ReminderServiceImpl(ReminderRepository reminderRepository,
@@ -189,30 +190,31 @@ public Reminder createCourseReminder(Long userId, Long medicineId, LocalTime rem
         }
     }
 
-@Override
-public boolean shouldNotifyNow(Reminder reminder) {
-    OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-    LocalTime currentTime = now.toLocalTime().withSecond(0).withNano(0);
+    @Override
+    public boolean shouldNotifyNow(Reminder reminder) {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
 
-    if (reminder.getReminderTime() == null) {
-        return false;
+        if (reminder.getReminderTime() == null) {
+            return false;
+        }
+
+        LocalTime reminderTime = reminder.getReminderTime().withSecond(0).withNano(0);
+        LocalTime currentTime = now.toLocalTime().withSecond(0).withNano(0);
+
+        boolean timeMatches = reminderTime.equals(currentTime);
+
+        if (reminder.getSpecificDate() != null) {
+            return timeMatches && reminder.getSpecificDate().equals(now.toLocalDate());
+        }
+
+        String daysOfWeek = reminder.getDaysOfWeek();
+        if (daysOfWeek == null || "everyday".equals(daysOfWeek)) {
+            return timeMatches;
+        }
+
+        int currentDay = now.getDayOfWeek().getValue();
+        return timeMatches && daysOfWeek.contains(String.valueOf(currentDay));
     }
-
-    LocalTime reminderTime = reminder.getReminderTime().withSecond(0).withNano(0);
-    boolean timeMatches = reminderTime.equals(currentTime);
-
-    if (reminder.getSpecificDate() != null) {
-        return timeMatches && reminder.getSpecificDate().equals(now.toLocalDate());
-    }
-
-    String daysOfWeek = reminder.getDaysOfWeek();
-    if (daysOfWeek == null || daysOfWeek.equals("everyday")) {
-        return timeMatches;
-    }
-
-    int currentDay = now.getDayOfWeek().getValue();
-    return timeMatches && daysOfWeek.contains(String.valueOf(currentDay));
-}
 
 private boolean checkDayOfWeek(Reminder reminder, OffsetDateTime now) {
     String daysOfWeek = reminder.getDaysOfWeek();
