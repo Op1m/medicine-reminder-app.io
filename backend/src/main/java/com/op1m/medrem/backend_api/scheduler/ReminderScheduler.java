@@ -11,10 +11,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.time.*;
 import java.util.Arrays;
 import java.util.List;
 
@@ -33,69 +30,92 @@ public class ReminderScheduler {
     @Scheduled(cron = "0 * * * * *")
     @Transactional
     public void checkDueReminders() {
+
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         LocalDate today = now.toLocalDate();
-        LocalTime currentTime = now.toLocalTime().withSecond(0).withNano(0);
-        int currentDayOfWeek = today.getDayOfWeek().getValue();
+        LocalTime currentTime = now.toLocalTime();
 
-        List<Reminder> allActive = reminderRepository.findAllActiveWithUserAndMedicine();
+        List<Reminder> reminders = reminderRepository.findAllActiveWithUserAndMedicine();
 
-        for (Reminder reminder : allActive) {
-            if (reminder.getReminderTime() == null) {
-                continue;
-            }
+        for (Reminder reminder : reminders) {
 
-            LocalTime reminderTime = reminder.getReminderTime().withSecond(0).withNano(0);
-            if (reminderTime.isAfter(currentTime) || reminderTime.isBefore(currentTime.minusMinutes(1))) {
-                continue;
-            }
+            if (reminder.getReminderTime() == null) continue;
 
-            boolean shouldNotify;
+            LocalTime reminderTime = reminder.getReminderTime();
+
+            // ✅ фикс: окно ±60 секунд
+            long diff = Math.abs(reminderTime.toSecondOfDay() - currentTime.toSecondOfDay());
+            if (diff > 60) continue;
+
+            // ✅ проверка даты
             if (reminder.getSpecificDate() != null) {
-                shouldNotify = today.equals(reminder.getSpecificDate());
+                if (!today.equals(reminder.getSpecificDate())) continue;
             } else {
-                String daysOfWeek = reminder.getDaysOfWeek();
-                if (daysOfWeek == null || "everyday".equals(daysOfWeek)) {
-                    shouldNotify = true;
-                } else {
-                    shouldNotify = Arrays.stream(daysOfWeek.split(","))
+                String days = reminder.getDaysOfWeek();
+                if (days != null && !days.equals("everyday")) {
+                    int todayNum = today.getDayOfWeek().getValue();
+                    boolean match = Arrays.stream(days.split(","))
                             .map(String::trim)
-                            .anyMatch(day -> String.valueOf(currentDayOfWeek).equals(day));
+                            .anyMatch(d -> d.equals(String.valueOf(todayNum)));
+                    if (!match) continue;
                 }
             }
 
-            if (!shouldNotify) {
-                continue;
-            }
+            // ❗ проверяем только TAKEN / SKIPPED
+            OffsetDateTime start = today.atStartOfDay().atOffset(ZoneOffset.UTC);
+            OffsetDateTime end = start.plusDays(1);
 
-            OffsetDateTime startOfDay = today.atStartOfDay().atOffset(ZoneOffset.UTC);
-            OffsetDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
-
-            boolean alreadyExists = medicineHistoryService
-                    .getHistoryByPeriod(reminder.getUser().getId(), startOfDay, endOfDay)
+            boolean alreadyDone = medicineHistoryService
+                    .getHistoryByPeriod(reminder.getUser().getId(), start, end)
                     .stream()
-                    .anyMatch(h -> h.getReminder().getId().equals(reminder.getId())
-                            && h.getScheduledTime() != null
-                            && h.getScheduledTime().toLocalTime().withSecond(0).withNano(0).equals(currentTime)
-                            && ( h.getStatus() == MedicineStatus.TAKEN
-                            || h.getStatus() == MedicineStatus.SKIPPED));
+                    .anyMatch(h ->
+                            h.getReminder().getId().equals(reminder.getId()) &&
+                                    (h.getStatus() == MedicineStatus.TAKEN ||
+                                            h.getStatus() == MedicineStatus.SKIPPED)
+                    );
 
-            if (alreadyExists) {
-                continue;
-            }
+            if (alreadyDone) continue;
 
+            // ✅ создаём history
             MedicineHistory history = medicineHistoryService.createScheduleDose(reminder.getId(), now);
 
+            // ✅ отправляем
             if (history != null) {
+                System.out.println("🚀 SEND reminder " + reminder.getId());
                 notificationService.notifyUser(reminder);
             }
         }
     }
 
-    @Scheduled(cron = "5 * * * * *")
+    @Scheduled(cron = "*/30 * * * * *")
     @Transactional
     public void checkPostponedReminders() {
-        medicineHistoryService.checkPostponedReminders();
+
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+
+        List<MedicineHistory> postponed = medicineHistoryService
+                .getMedicineHistoryByStatus(null, MedicineStatus.POSTPONED);
+
+        for (MedicineHistory history : postponed) {
+
+            if (history.getScheduledTime() == null) continue;
+
+            // ✅ фикс
+            if (!history.getScheduledTime().isAfter(now)) {
+
+                Reminder reminder = history.getReminder();
+                if (reminder == null) continue;
+
+                System.out.println("⏰ POSTPONED FIRE " + reminder.getId());
+
+                notificationService.notifyUser(reminder);
+
+                history.setStatus(MedicineStatus.PENDING);
+                history.setScheduledTime(now);
+
+                medicineHistoryService.save(history);
+            }
+        }
     }
 
     @Scheduled(cron = "10 * * * * *")
