@@ -58,5 +58,5 @@ public interface MedicineHistoryRepository extends JpaRepository<MedicineHistory
     @Query("delete from MedicineHistory mh where mh.reminder.id = :reminderId")
     void deleteByReminderId(@Param("reminderId") Long reminderId);
 
-
+    List<MedicineHistory> findByStatus(MedicineStatus status);
 }
